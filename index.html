@@ -1,0 +1,1715 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maxymax MP4 To Spritesheet/PNG</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+    <style>
+        /* --- CORE THEME --- */
+        body {
+            background-color: #000000;
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 1) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 1) 0, transparent 50%);
+            color: #ffffff;
+        }
+
+        /* --- UTILITIES --- */
+        .glass-panel {
+            background: rgba(17, 24, 39, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .checkerboard {
+            background-image:
+                linear-gradient(45deg, #1f2937 25%, transparent 25%),
+                linear-gradient(-45deg, #1f2937 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, #1f2937 75%),
+                linear-gradient(-45deg, transparent 75%, #1f2937 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+            background-color: #111827;
+            /* Dark base for checkerboard */
+        }
+
+        canvas {
+            max-width: 100%;
+            height: auto;
+            cursor: crosshair;
+        }
+
+        /* --- SCROLLBARS --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+
+        /* --- TRIM SLIDER (NEON STYLE) --- */
+        .trim-track {
+            position: relative;
+            height: 8px;
+            background-color: #1e293b;
+            border-radius: 9999px;
+            cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        .trim-highlight {
+            position: absolute;
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #06b6d4);
+            opacity: 0.8;
+            border-radius: 9999px;
+            pointer-events: none;
+            box-shadow: 0 0 10px rgba(6, 182, 212, 0.5);
+        }
+
+        @keyframes pulse-glow {
+            0% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(59, 130, 246, 0);
+                transform: translate(-50%, -50%) scale(1.1);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+                transform: translate(-50%, -50%) scale(1);
+            }
+        }
+
+        .trim-handle {
+            position: absolute;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            background-color: #000;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            cursor: grab;
+            z-index: 20;
+            animation: pulse-glow 2s infinite;
+        }
+
+        .trim-handle:active {
+            cursor: grabbing;
+            background-color: #3b82f6;
+            border-color: #3b82f6;
+            animation: none;
+            box-shadow: 0 0 20px #3b82f6;
+        }
+
+        /* --- GLOW TEXT --- */
+        .text-glow {
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+        }
+
+        .text-glow-blue {
+            text-shadow: 0 0 10px rgba(59, 130, 246, 0.6);
+        }
+
+        /* --- INPUTS & DROPDOWNS --- */
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        .dark-input {
+            @apply bg-slate-900 border border-slate-700 text-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all;
+        }
+
+        select {
+            background-color: #172554;
+            /* blue-950 */
+            color: white;
+            border: 1px solid #1e3a8a;
+        }
+
+        select option {
+            background-color: #172554;
+            color: white;
+        }
+
+        /* --- RANGE SLIDERS --- */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #fff;
+            border: 2px solid #3b82f6;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+        }
+
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #334155;
+            border-radius: 2px;
+        }
+
+        /* --- TOGGLE SWITCH --- */
+        .toggle-checkbox:checked {
+            right: 0;
+            border-color: #3b82f6;
+        }
+
+        .toggle-checkbox:checked+.toggle-label {
+            background-color: #3b82f6;
+        }
+    </style>
+</head>
+
+<body class="font-sans antialiased overflow-x-hidden selection:bg-blue-500 selection:text-white">
+
+    <div class="max-w-7xl mx-auto px-4 py-8">
+
+        <!-- Header -->
+        <header class="mb-10 text-center relative">
+            <div class="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+                <div class="w-64 h-64 bg-blue-600 rounded-full blur-[100px]"></div>
+            </div>
+            <div class="relative z-10">
+                <h1
+                    class="text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-200 to-slate-400 mb-2 drop-shadow-2xl">
+                    MAXYMAX <span class="text-blue-500">MP4 TO SPRITESHEET/PNG</span>
+                </h1>
+                <p class="text-blue-200/60 font-medium tracking-widest text-sm uppercase">Advanced AI Sprite Extraction
+                    Engine</p>
+            </div>
+        </header>
+
+        <!-- Upload Section -->
+        <div id="uploadZone"
+            class="glass-panel rounded-3xl p-16 text-center transition-all hover:border-blue-500/50 group cursor-pointer relative overflow-hidden">
+            <div
+                class="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500">
+            </div>
+
+            <input type="file" id="videoUpload" accept="video/mp4,video/quicktime" class="hidden" multiple>
+            <label for="videoUpload" class="cursor-pointer relative z-10 block">
+                <div
+                    class="w-24 h-24 rounded-full bg-slate-800/50 border border-slate-600 flex items-center justify-center mx-auto mb-6 group-hover:scale-110 group-hover:border-blue-400 group-hover:shadow-[0_0_30px_rgba(59,130,246,0.3)] transition-all duration-300">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                        class="h-10 w-10 text-slate-400 group-hover:text-white transition-colors" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                </div>
+                <span class="text-2xl font-bold text-white group-hover:text-blue-200 transition-colors">Initialize
+                    Footage</span>
+                <p class="text-sm text-slate-500 mt-3 font-mono">SUPPORTING: .MP4 .MOV // BATCH READY</p>
+            </label>
+        </div>
+
+        <!-- Main Editor -->
+        <div id="editor" class="hidden space-y-6 animate-[fadeIn_0.5s_ease-out]">
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
+                <!-- Queue Sidebar -->
+                <div class="lg:col-span-1">
+                    <div class="glass-panel rounded-2xl p-5 flex flex-col h-[750px]">
+                        <div class="flex justify-between items-center mb-6 border-b border-slate-700/50 pb-4">
+                            <h3 class="font-bold text-white text-sm uppercase tracking-wider flex items-center">
+                                <span class="w-2 h-2 bg-blue-500 rounded-full mr-2 animate-pulse"></span>
+                                Batch Queue
+                            </h3>
+                            <span id="queueCount"
+                                class="bg-blue-900/30 text-blue-300 text-[10px] px-2 py-1 rounded border border-blue-500/20 font-mono">0</span>
+                        </div>
+
+                        <div id="fileList" class="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                            <!-- Items injected here -->
+                        </div>
+
+                        <button onclick="location.reload()"
+                            class="mt-4 w-full py-3 text-xs font-bold text-slate-500 hover:text-red-400 transition-colors uppercase tracking-widest border-t border-slate-700/50">
+                            Reset System
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Center Preview -->
+                <div class="lg:col-span-2 space-y-4">
+                    <div class="glass-panel rounded-2xl p-1 relative group">
+                        <!-- Canvas Container -->
+                        <div
+                            class="relative rounded-xl overflow-hidden checkerboard border border-slate-700 shadow-2xl">
+                            <canvas id="mainCanvas" class="w-full h-auto block"></canvas>
+
+                            <!-- Overlay UI: Time & Play Controls -->
+                            <div
+                                class="absolute bottom-0 left-0 right-0 p-4 flex items-end justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+                                <button id="playPauseBtn"
+                                    class="pointer-events-auto p-3 rounded-full bg-white/10 hover:bg-blue-600 hover:text-white text-white backdrop-blur-md transition-all active:scale-95 border border-white/10">
+                                    <svg id="playIcon" class="w-6 h-6" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd"
+                                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                                            clip-rule="evenodd"></path>
+                                    </svg>
+                                    <svg id="pauseIcon" class="w-6 h-6 hidden" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd"
+                                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5 0a1 1 0 012 0v4a1 1 0 11-2 0V8z"
+                                            clip-rule="evenodd"></path>
+                                    </svg>
+                                </button>
+                                <span id="timeDisplay"
+                                    class="font-mono text-xs text-blue-200 bg-black/50 px-3 py-1 rounded border border-blue-500/30">0.00s
+                                    / 0.00s</span>
+                            </div>
+                        </div>
+
+                        <!-- Timeline Editor -->
+                        <div class="px-6 py-6 bg-slate-900/50 border-t border-slate-700/50 mt-1 rounded-b-xl">
+                            <!-- Dual Slider -->
+                            <div class="relative py-4 mb-6 select-none">
+                                <div id="trimTrack" class="trim-track">
+                                    <div id="trimHighlight" class="trim-highlight"></div>
+                                </div>
+                                <div id="handleStart" class="trim-handle" title="Start Point"></div>
+                                <div id="handleEnd" class="trim-handle" title="End Point"></div>
+                            </div>
+
+                            <!-- Inputs -->
+                            <div class="flex items-center justify-between gap-4">
+                                <div class="bg-slate-800/50 p-2 rounded-lg border border-slate-700/50">
+                                    <label
+                                        class="block text-[10px] font-bold text-blue-400 uppercase mb-1 ml-1 tracking-wider">Start</label>
+                                    <input type="number" id="startTimeInput" step="0.01" min="0"
+                                        class="w-20 bg-transparent border-none text-xl font-mono text-white font-bold p-0 focus:ring-0 placeholder-slate-600"
+                                        placeholder="0.00">
+                                </div>
+
+                                <div class="flex-1 px-4 flex flex-col items-center">
+                                    <label
+                                        class="text-[10px] font-bold text-slate-500 uppercase mb-1 tracking-widest">Playback
+                                        Speed</label>
+                                    <div class="flex items-center space-x-2 w-full max-w-[200px]">
+                                        <span class="text-[10px] text-slate-500">0.1x</span>
+                                        <input type="range" id="speedRange" min="0.1" max="3.0" step="0.1" value="1.0"
+                                            class="flex-1 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                                        <input type="number" id="speedInput" min="0.1" max="3.0" step="0.1" value="1.0"
+                                            class="w-12 bg-slate-800 border border-slate-700 rounded text-center text-xs font-mono text-blue-300 py-1 focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                </div>
+
+                                <div class="bg-slate-800/50 p-2 rounded-lg border border-slate-700/50 text-right">
+                                    <label
+                                        class="block text-[10px] font-bold text-blue-400 uppercase mb-1 mr-1 tracking-wider">End</label>
+                                    <input type="number" id="endTimeInput" step="0.01" min="0"
+                                        class="w-20 bg-transparent border-none text-xl font-mono text-white font-bold p-0 text-right focus:ring-0 placeholder-slate-600"
+                                        placeholder="0.00">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Controls -->
+                <div class="lg:col-span-1 space-y-6">
+                    <!-- Keying Controls -->
+                    <div class="glass-panel rounded-2xl p-6">
+                        <h3
+                            class="font-bold text-white mb-6 text-xs uppercase tracking-widest border-b border-slate-700 pb-2">
+                            Chroma Engine</h3>
+
+                        <!-- Color Picker -->
+                        <div class="mb-6">
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-2">Key Color</label>
+                            <div
+                                class="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-700">
+                                <div id="colorSwatch"
+                                    class="w-10 h-10 rounded shadow-inner border border-slate-600 shrink-0 transition-colors duration-200"
+                                    style="background-color: #00ff00;"></div>
+                                <div id="hexDisplay" class="flex-1 text-xs font-mono text-blue-300">#00FF00</div>
+                            </div>
+                        </div>
+
+                        <!-- Sliders -->
+                        <div class="space-y-6">
+                            <div>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase">Similarity</label>
+                                    <span id="toleranceVal" class="text-xs text-blue-400 font-bold font-mono">15</span>
+                                </div>
+                                <input type="range" id="toleranceRange" min="0" max="150" value="15" class="w-full">
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between mb-2">
+                                    <label class="text-[10px] font-bold text-slate-400 uppercase">Matte Choke</label>
+                                    <span id="chokeVal" class="text-xs text-blue-400 font-bold font-mono">1px</span>
+                                </div>
+                                <input type="range" id="chokeRange" min="0" max="15" value="1" step="1" class="w-full">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Export Controls -->
+                    <div class="glass-panel rounded-2xl p-6 relative overflow-hidden">
+                        <div
+                            class="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl -mr-16 -mt-16 pointer-events-none">
+                        </div>
+
+                        <h3
+                            class="font-bold text-white mb-6 text-xs uppercase tracking-widest border-b border-slate-700 pb-2 relative z-10">
+                            Export Config</h3>
+
+                        <div class="space-y-4 relative z-10">
+                            <!-- Format Selection -->
+                            <div class="mb-4">
+                                <label class="block text-[10px] font-bold text-slate-400 uppercase mb-2">Export
+                                    Format</label>
+                                <div
+                                    class="flex flex-col space-y-2 bg-slate-900/50 p-3 rounded-lg border border-slate-700">
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <input type="checkbox" id="fmtSheet"
+                                            class="form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800 focus:ring-0 focus:ring-offset-0"
+                                            checked>
+                                        <span class="text-xs font-bold text-slate-300">Sprite Sheet</span>
+                                    </label>
+                                    <label class="flex items-center space-x-2 cursor-pointer">
+                                        <div class="flex items-center space-x-3 mb-2">
+                                            <input type="checkbox" id="fmtSeq"
+                                                class="w-4 h-4 bg-slate-700 border-none rounded text-blue-500 focus:ring-0">
+                                            <label for="fmtSeq" class="text-[10px] font-bold text-slate-400">PNG
+                                                Sequence</label>
+                                        </div>
+
+                                        <!-- GIF Export Options -->
+                                        <div class="mt-4 pt-4 border-t border-slate-700/50">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <div class="flex items-center space-x-3">
+                                                    <input type="checkbox" id="fmtGif"
+                                                        class="w-4 h-4 bg-slate-700 border-none rounded text-pink-500 focus:ring-0">
+                                                    <label for="fmtGif"
+                                                        class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Export
+                                                        as GIF</label>
+                                                </div>
+                                            </div>
+                                            <div id="gifSettings"
+                                                class="transition-all duration-300 opacity-50 pointer-events-none pl-7">
+                                                <label
+                                                    class="block text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">GIF
+                                                    Background</label>
+                                                <div class="flex items-center space-x-2">
+                                                    <div
+                                                        class="relative w-8 h-8 rounded-lg overflow-hidden border border-slate-600 shadow-sm shrink-0">
+                                                        <input type="color" id="gifBgColor" value="#000000"
+                                                            class="absolute -top-1/2 -left-1/2 w-[200%] h-[200%] cursor-pointer p-0 border-0">
+                                                    </div>
+                                                    <input type="text" id="gifHexDisplay" value="#000000"
+                                                        class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] font-mono text-slate-300 focus:outline-none focus:border-indigo-500 transition-colors text-center"
+                                                        placeholder="#000000">
+                                                    <button id="gifEyeDropper"
+                                                        class="p-2 bg-slate-800 hover:bg-slate-700 rounded-lg border border-slate-700 hover:border-slate-500 text-slate-400 hover:text-white transition-all"
+                                                        title="Pick from video">
+                                                        <svg class="w-3 h-3" fill="none" stroke="currentColor"
+                                                            viewBox="0 0 24 24">
+                                                            <path stroke-linecap="round" stroke-linejoin="round"
+                                                                stroke-width="2"
+                                                                d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z">
+                                                            </path>
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Resolution Selection -->
+                            <div>
+                                <label
+                                    class="block text-[10px] font-bold text-slate-400 uppercase mb-2">Resolutions</label>
+                                <div class="bg-slate-900/50 p-3 rounded-lg border border-slate-700 space-y-2">
+                                    <label
+                                        class="flex items-center space-x-2 cursor-pointer pb-2 border-b border-slate-700/50 mb-2">
+                                        <input type="checkbox" id="resAll"
+                                            class="form-checkbox text-blue-400 rounded border-slate-600 bg-slate-800 focus:ring-0 focus:ring-offset-0">
+                                        <span
+                                            class="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Include
+                                            All Sizes</span>
+                                    </label>
+
+                                    <div class="grid grid-cols-2 gap-2" id="resChecklist">
+                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
+                                                value="original"
+                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
+                                            <span class="text-xs text-slate-300">Original</span></label>
+                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
+                                                value="128"
+                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
+                                            <span class="text-xs text-slate-300">128px</span></label>
+                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
+                                                value="256"
+                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
+                                            <span class="text-xs text-slate-300">256px</span></label>
+                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
+                                                value="512"
+                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800"
+                                                checked> <span class="text-xs text-slate-300">512px</span></label>
+                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
+                                                value="1024"
+                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
+                                            <span class="text-xs text-slate-300">1024px</span></label>
+                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
+                                                value="2048"
+                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
+                                            <span class="text-xs text-slate-300">2048px</span></label>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Multi-Pass Scaling (Sidebar) -->
+                            <div class="pt-4 border-t border-slate-700/50">
+                                <div class="flex items-center justify-between mb-2">
+                                    <div class="flex items-center space-x-3">
+                                        <input type="checkbox" id="multiPassToggle"
+                                            class="w-4 h-4 bg-slate-700 border-none rounded text-teal-500 focus:ring-0">
+                                        <label for="multiPassToggle"
+                                            class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Multi-Pass
+                                            Scaling</label>
+                                    </div>
+                                    <span id="multiPassVal" class="text-[10px] font-mono text-teal-400">4</span>
+                                </div>
+                                <div id="multiPassSettings"
+                                    class="transition-all duration-300 opacity-50 pointer-events-none pl-7">
+                                    <input type="range" id="multiPassSlider" min="2" max="16" value="4" step="2"
+                                        class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-teal-500 [&::-webkit-slider-thumb]:rounded-full">
+                                    <p class="text-[9px] text-slate-500 mt-1">Higher values = better quality (slower)
+                                    </p>
+                                </div>
+                            </div>
+
+                            <!-- Options Toggles -->
+                            <div class="pt-4 space-y-3 border-t border-slate-700/50">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold text-blue-300 uppercase">Auto-Fit
+                                        Subject</label>
+                                    <div
+                                        class="relative inline-block w-10 h-5 align-middle select-none transition duration-200 ease-in">
+                                        <input type="checkbox" id="autoFitToggle" checked
+                                            class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-700 transition-all duration-300 left-0" />
+                                        <label for="autoFitToggle"
+                                            class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-800 cursor-pointer border border-slate-700"></label>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold text-blue-300 uppercase">Remove
+                                        Watermark</label>
+                                    <div
+                                        class="relative inline-block w-10 h-5 align-middle select-none transition duration-200 ease-in">
+                                        <input type="checkbox" id="watermarkToggle" checked
+                                            class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-700 transition-all duration-300 left-0" />
+                                        <label for="watermarkToggle"
+                                            class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-800 cursor-pointer border border-slate-700"></label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Comment Box -->
+                        <div class="pt-4 border-t border-slate-700/50">
+                            <label class="block text-[10px] font-bold text-slate-400 uppercase mb-2">TXT Comment</label>
+                            <textarea id="commentBox" rows="2"
+                                class="w-full bg-slate-900/50 border border-slate-700 rounded-lg p-3 text-xs text-blue-200 placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 resize-none"
+                                placeholder="Add notes for the AI/User here..."></textarea>
+                        </div>
+                    </div>
+
+                    <button id="exportBtn"
+                        class="mt-8 w-full py-4 relative group overflow-hidden rounded-xl shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all active:scale-95">
+                        <div
+                            class="absolute inset-0 bg-gradient-to-r from-blue-600 via-indigo-600 to-blue-600 opacity-90 group-hover:opacity-100 transition-opacity">
+                        </div>
+                        <div
+                            class="absolute inset-0 bg-[length:200%_100%] bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] pointer-events-none">
+                        </div>
+
+                        <div class="relative flex flex-col items-center justify-center">
+                            <span
+                                class="text-sm font-black text-white uppercase tracking-[0.2em] drop-shadow-md">Initiate
+                                Render</span>
+                            <span class="text-[9px] text-blue-200 mt-1 uppercase tracking-tighter">Multi-Threaded
+                                Processing</span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modern Progress Modal -->
+    <div id="statusModal"
+        class="fixed inset-0 bg-black/90 backdrop-blur-xl hidden flex items-center justify-center z-50 p-6 animate-[fadeIn_0.2s_ease-out]">
+        <div
+            class="bg-slate-900 border border-slate-700 rounded-3xl p-10 max-w-md w-full shadow-[0_0_50px_rgba(59,130,246,0.2)] text-center relative overflow-hidden">
+            <div
+                class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 via-purple-500 to-blue-500 animate-[gradient-x_2s_linear_infinite]">
+            </div>
+
+            <div class="relative w-20 h-20 mx-auto mb-8">
+                <div class="absolute inset-0 border-2 border-slate-800 rounded-full"></div>
+                <div
+                    class="absolute inset-0 border-2 border-blue-500 rounded-full border-t-transparent animate-spin shadow-[0_0_15px_rgba(59,130,246,0.5)]">
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center">
+                    <span id="procText" class="text-xs font-mono font-bold text-blue-400">0%</span>
+                </div>
+            </div>
+
+            <h3 id="statusTitle" class="text-2xl font-black text-white mb-2 tracking-tight">ANALYZING</h3>
+            <p class="text-slate-400 text-xs mb-8 font-mono uppercase tracking-wide">Target: <span id="currentFileName"
+                    class="text-blue-400">...</span></p>
+
+            <div class="space-y-6 text-left">
+                <div>
+                    <div
+                        class="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                        <span>Total Batch</span>
+                        <span id="batchText">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div id="batchBar"
+                            class="bg-blue-600 h-full w-0 transition-all duration-300 shadow-[0_0_10px_rgba(37,99,235,0.5)]">
+                        </div>
+                    </div>
+                </div>
+                <div>
+                    <div
+                        class="flex justify-between text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2">
+                        <span id="passTypeLabel">Operation</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div id="procBar"
+                            class="bg-indigo-500 h-full w-0 transition-all duration-100 shadow-[0_0_10px_rgba(99,102,241,0.5)]">
+                        </div>
+                    </div>
+
+                    <p id="statusDetail"
+                        class="text-center text-[9px] text-slate-500 mt-1 font-mono tracking-tight cursor-default">
+                        Initializing...</p>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast"
+        class="fixed bottom-8 left-1/2 -translate-x-1/2 px-6 py-4 bg-slate-900 border border-slate-700 text-white text-xs font-bold uppercase tracking-wide rounded-full shadow-2xl transition-all opacity-0 translate-y-10 pointer-events-none z-[60] flex items-center">
+        <span class="w-2 h-2 bg-green-500 rounded-full mr-3 shadow-[0_0_5px_#22c55e]"></span>
+        <span id="toastMsg">Notification</span>
+    </div>
+    </div>
+
+    <!-- Hidden Video Players -->
+    <video id="sourceVideo" class="hidden" muted loop playsinline></video>
+
+    <!-- WORKER SCRIPT (Logic remains the same, style changes only) -->
+    <script id="workerScript" type="text/javascript-worker">
+        function getColorDistance(r1, g1, b1, r2, g2, b2) {
+            const u1 = -0.14713 * r1 - 0.28886 * g1 + 0.43599 * b1;
+            const v1 = 0.615 * r1 - 0.51499 * g1 - 0.10001 * b1;
+            const u2 = -0.14713 * r2 - 0.28886 * g2 + 0.43599 * b2;
+            const v2 = 0.615 * r2 - 0.51499 * g2 - 0.10001 * b2;
+            return Math.sqrt((u1 - u2) ** 2 + (v1 - v2) ** 2);
+        }
+
+        self.onmessage = function(e) {
+            const { imageData, keyColor, tolerance, smoothness, chokeAmount, id, needsImage, removeWatermark, autoCrop } = e.data;
+            const data = imageData.data;
+            const w = imageData.width, h = imageData.height;
+            const kr = keyColor.r, kg = keyColor.g, kb = keyColor.b;
+            
+            let minX = w, minY = h, maxX = 0, maxY = 0, hasVisible = false;
+            
+            // Define Watermark Area (Bottom Right 15% Width, 10% Height)
+            const watermarkX = w * 0.85;
+            const watermarkY = h * 0.90;
+
+            // Optimized Loop: Iterate X/Y to avoid modulo math
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const i = (y * w + x) * 4;
+
+                    // 1. HARD ERASE WATERMARK (Optional)
+                    if (removeWatermark && x > watermarkX && y > watermarkY) {
+                        data[i + 3] = 0;
+                        continue;
+                    }
+
+                    // 2. CHROMA KEY LOGIC
+                    const r = data[i], g = data[i+1], b = data[i+2];
+                    const diff = getColorDistance(r, g, b, kr, kg, kb);
+                    
+                    if (diff < tolerance) {
+                        data[i + 3] = 0;
+                    } else if (diff < tolerance + smoothness) {
+                        data[i + 3] = ((diff - tolerance) / smoothness) * 255;
+                    }
+
+                    // 3. BOUNDING BOX TRACKING (Only if needed)
+                    // If autoCrop is FALSE, we can technically skip this math to save time,
+                    // but we do it anyway if we are in "scan pass" to be safe, 
+                    // or we check 'needsImage' context. 
+                    // Actually, if tracking is off, we generally ignore this data in the main thread anyway.
+                    if (data[i + 3] > 1) { 
+                        if (x < minX) minX = x;
+                        if (x > maxX) maxX = x;
+                        if (y < minY) minY = y;
+                        if (y > maxY) maxY = y;
+                        hasVisible = true;
+                    }
+                }
+            }
+
+            if (chokeAmount > 0 && hasVisible) {
+                const alphaCopy = new Uint8Array(w * h);
+                for (let i = 0; i < alphaCopy.length; i++) alphaCopy[i] = data[i * 4 + 3];
+                for (let y = minY; y <= maxY; y++) {
+                    for (let x = minX; x <= maxX; x++) {
+                        const idx = y * w + x;
+                        if (alphaCopy[idx] === 0) continue;
+                        let minAlpha = alphaCopy[idx];
+                        const yM = Math.max(0, y - chokeAmount), yX = Math.min(h - 1, y + chokeAmount);
+                        const xM = Math.max(0, x - chokeAmount), xX = Math.min(w - 1, x + chokeAmount);
+                        for (let ny = yM; ny <= yX; ny++) {
+                            for (let nx = xM; nx <= xX; nx++) {
+                                if (alphaCopy[ny * w + nx] < minAlpha) minAlpha = alphaCopy[ny * w + nx];
+                                if (minAlpha === 0) break;
+                            }
+                            if (minAlpha === 0) break;
+                        }
+                        data[idx * 4 + 3] = minAlpha;
+                    }
+                }
+            }
+            const bbox = hasVisible ? { minX, minY, maxX, maxY } : null;
+            if (needsImage) self.postMessage({ imageData, id, bbox }, [imageData.data.buffer]);
+            else self.postMessage({ id, bbox });
+        };
+    </script>
+
+    <script>
+        // Main Logic
+        const videoUpload = document.getElementById('videoUpload');
+        const sourceVideo = document.getElementById('sourceVideo');
+        const mainCanvas = document.getElementById('mainCanvas');
+        const fileList = document.getElementById('fileList');
+        const resSelect = document.getElementById('resSelect');
+        const modeSelect = document.getElementById('modeSelect');
+        const ctx = mainCanvas.getContext('2d', { willReadFrequently: true });
+
+        let batchFiles = [];
+        let fileSettings = []; // Stores settings object for each file index
+        let currentFileIndex = 0;
+        let keyColor = { r: 0, g: 255, b: 0 };
+        let isExporting = false;
+        let isPreviewLoopRunning = false;
+        let trimStart = 0;
+        let trimEnd = 1;
+
+        const threads = navigator.hardwareConcurrency || 4;
+        const workerBlob = new Blob([document.getElementById('workerScript').textContent], { type: 'text/javascript' });
+        const workerPool = Array.from({ length: threads }, () => new Worker(URL.createObjectURL(workerBlob)));
+
+        const ranges = { tolerance: document.getElementById('toleranceRange'), choke: document.getElementById('chokeRange') };
+        const vals = { tolerance: document.getElementById('toleranceVal'), choke: document.getElementById('chokeVal') };
+
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const playIcon = document.getElementById('playIcon');
+        const pauseIcon = document.getElementById('pauseIcon');
+        const timeDisplay = document.getElementById('timeDisplay');
+
+        // Speed Controls
+        const speedRange = document.getElementById('speedRange');
+        const speedInput = document.getElementById('speedInput');
+        const commentBox = document.getElementById('commentBox');
+
+        // New Toggles
+        const autoFitToggle = document.getElementById('autoFitToggle');
+        const watermarkToggle = document.getElementById('watermarkToggle');
+
+        // Trim UI References
+        const handleStart = document.getElementById('handleStart');
+        const handleEnd = document.getElementById('handleEnd');
+        const trimTrack = document.getElementById('trimTrack');
+        const trimHighlight = document.getElementById('trimHighlight');
+        const startTimeInput = document.getElementById('startTimeInput');
+        const endTimeInput = document.getElementById('endTimeInput');
+
+        function getPreciseDistance(r1, g1, b1, r2, g2, b2) {
+            const u1 = -0.14713 * r1 - 0.28886 * g1 + 0.43599 * b1;
+            const v1 = 0.615 * r1 - 0.51499 * g1 - 0.10001 * b1;
+            const u2 = -0.14713 * r2 - 0.28886 * g2 + 0.43599 * b2;
+            const v2 = 0.615 * r2 - 0.51499 * g2 - 0.10001 * b2;
+            return Math.sqrt((u1 - u2) ** 2 + (v1 - v2) ** 2);
+        }
+
+        function applySharpen(ctx, w, h, mix) {
+            const id = ctx.getImageData(0, 0, w, h);
+            const d = id.data;
+            const copy = new Uint8ClampedArray(d);
+
+            for (let y = 1; y < h - 1; y++) {
+                for (let x = 1; x < w - 1; x++) {
+                    const idx = (y * w + x) * 4;
+                    if (d[idx + 3] < 10) continue; // Skip transparent
+
+                    const up = ((y - 1) * w + x) * 4;
+                    const down = ((y + 1) * w + x) * 4;
+                    const left = (y * w + (x - 1)) * 4;
+                    const right = (y * w + (x + 1)) * 4;
+
+                    // Kernel: 0 -1 0 | -1 5 -1 | 0 -1 0
+                    const r = 5 * copy[idx] - copy[up] - copy[down] - copy[left] - copy[right];
+                    const g = 5 * copy[idx + 1] - copy[up + 1] - copy[down + 1] - copy[left + 1] - copy[right + 1];
+                    const b = 5 * copy[idx + 2] - copy[up + 2] - copy[down + 2] - copy[left + 2] - copy[right + 2];
+
+                    d[idx] = Math.min(255, Math.max(0, (1 - mix) * copy[idx] + mix * r));
+                    d[idx + 1] = Math.min(255, Math.max(0, (1 - mix) * copy[idx + 1] + mix * g));
+                    d[idx + 2] = Math.min(255, Math.max(0, (1 - mix) * copy[idx + 2] + mix * b));
+                    // alpha unchanged
+                }
+            }
+            ctx.putImageData(id, 0, 0);
+        }
+
+        // Hermite resizing for better quality than default canvas scaling
+        async function resampleHermite(canvas, W, H, progressCb) {
+            const W2 = W;
+            const H2 = H;
+            const img = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+            const img2 = canvas.getContext("2d").createImageData(W2, H2);
+            const data = img.data;
+            const data2 = img2.data;
+            const ratio_w = canvas.width / W2;
+            const ratio_h = canvas.height / H2;
+            const ratio_w_half = Math.ceil(ratio_w / 2);
+            const ratio_h_half = Math.ceil(ratio_h / 2);
+
+            // Execute in chunks to keep UI responsive
+            const totalPixels = W2 * H2;
+            let processed = 0;
+
+            for (let j = 0; j < H2; j++) {
+                // Yield very few rows
+                if (j % 5 === 0 && progressCb) {
+                    progressCb(j, H2);
+                    await new Promise(r => setTimeout(r, 0));
+                }
+
+                for (let i = 0; i < W2; i++) {
+                    const x2 = (i + j * W2) * 4;
+                    let weight = 0;
+                    let weights = 0;
+                    let weights_alpha = 0;
+                    let gx_r = 0;
+                    let gx_g = 0;
+                    let gx_b = 0;
+                    let gx_a = 0;
+                    const center_y = (j + 0.5) * ratio_h;
+                    const yy_start = Math.floor(j * ratio_h);
+                    const yy_stop = Math.ceil((j + 1) * ratio_h);
+
+                    for (let yy = yy_start; yy < yy_stop; yy++) {
+                        const dy = Math.abs(center_y - (yy + 0.5)) / ratio_h_half;
+                        const center_x = (i + 0.5) * ratio_w;
+                        const w0 = dy * dy; // Pre-calc part of weight
+
+                        const xx_start = Math.floor(i * ratio_w);
+                        const xx_stop = Math.ceil((i + 1) * ratio_w);
+
+                        for (let xx = xx_start; xx < xx_stop; xx++) {
+                            const dx = Math.abs(center_x - (xx + 0.5)) / ratio_w_half;
+                            const w = Math.sqrt(w0 + dx * dx);
+
+                            if (w >= 1) {
+                                // pixel too far
+                                continue;
+                            }
+
+                            // Hermite filter weight
+                            weight = 2 * w * w * w - 3 * w * w + 1;
+
+                            const pos_x = 4 * (xx + yy * canvas.width);
+                            gx_a += weight * data[pos_x + 3];
+                            weights_alpha += weight;
+
+                            // Color weights - premultiplied handling
+                            if (data[pos_x + 3] < 255)
+                                weight = weight * data[pos_x + 3] / 250;
+                            gx_r += weight * data[pos_x];
+                            gx_g += weight * data[pos_x + 1];
+                            gx_b += weight * data[pos_x + 2];
+                            weights += weight;
+                        }
+                    }
+
+                    data2[x2] = gx_r / weights;
+                    data2[x2 + 1] = gx_g / weights;
+                    data2[x2 + 2] = gx_b / weights;
+                    data2[x2 + 3] = gx_a / weights_alpha;
+                }
+            }
+
+            const c = document.createElement('canvas');
+            c.width = W2;
+            c.height = H2;
+            c.getContext('2d').putImageData(img2, 0, 0);
+            return c;
+        }
+
+        videoUpload.addEventListener('change', e => {
+            batchFiles = Array.from(e.target.files);
+            if (!batchFiles.length) return;
+            fileSettings = new Array(batchFiles.length).fill(null); // Reset settings
+            fileList.innerHTML = '';
+            batchFiles.forEach((f, i) => {
+                const div = document.createElement('div');
+                div.id = `fileItem-${i}`;
+                div.className = "flex items-center space-x-3 p-3 rounded-xl border border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/50 cursor-pointer group transition-all";
+                div.innerHTML = `<div class="w-8 h-8 bg-slate-700 rounded flex items-center justify-center text-[10px] font-bold text-slate-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">${i + 1}</div>
+                                <div class="flex-1 overflow-hidden"><p class="text-[11px] font-bold text-slate-300 group-hover:text-white truncate transition-colors">${f.name}</p></div>`;
+                div.onclick = () => loadForPreview(i);
+                fileList.appendChild(div);
+            });
+            document.getElementById('queueCount').innerText = batchFiles.length;
+            document.getElementById('uploadZone').classList.add('hidden');
+            document.getElementById('editor').classList.remove('hidden');
+            currentFileIndex = -1; // Force load
+            loadForPreview(0);
+        });
+
+        // --- SETTINGS MANAGEMENT ---
+        function getSettingsFromUI() {
+            const selectedRes = Array.from(document.querySelectorAll('.res-chk:checked')).map(c => c.value);
+            const selectedFmt = [];
+            if (document.getElementById('fmtSheet').checked) selectedFmt.push('sheet');
+            if (document.getElementById('fmtSeq').checked) selectedFmt.push('seq');
+
+            return {
+                trimStart,
+                trimEnd,
+                keyColor: { ...keyColor },
+                tolerance: parseInt(ranges.tolerance.value),
+                choke: parseInt(ranges.choke.value),
+                speed: parseFloat(speedInput.value) || 1.0,
+                autoFit: autoFitToggle.checked,
+                watermark: watermarkToggle.checked,
+                resolutions: selectedRes,
+                formats: selectedFmt,
+                comment: commentBox.value,
+                hexInfo: { hex: document.getElementById('hexDisplay').innerText, swatch: document.getElementById('colorSwatch').style.backgroundColor }
+            };
+        }
+
+        function applySettingsToUI(s) {
+            if (!s) return;
+            trimStart = s.trimStart;
+            trimEnd = s.trimEnd;
+            keyColor = s.keyColor;
+
+            ranges.tolerance.value = s.tolerance; vals.tolerance.innerText = s.tolerance;
+            ranges.choke.value = s.choke; vals.choke.innerText = s.choke + 'px';
+
+            speedInput.value = s.speed; speedRange.value = s.speed; sourceVideo.playbackRate = s.speed;
+
+            autoFitToggle.checked = s.autoFit;
+            watermarkToggle.checked = s.watermark;
+            commentBox.value = s.comment;
+
+            if (s.formats) {
+                document.getElementById('fmtSheet').checked = s.formats.includes('sheet');
+                document.getElementById('fmtSeq').checked = s.formats.includes('seq');
+            }
+            if (s.resolutions) {
+                document.querySelectorAll('.res-chk').forEach(c => c.checked = s.resolutions.includes(c.value));
+                const all = document.querySelectorAll('.res-chk');
+                const checked = document.querySelectorAll('.res-chk:checked');
+                document.getElementById('resAll').checked = all.length === checked.length;
+            }
+
+            if (s.hexInfo) {
+                document.getElementById('hexDisplay').innerText = s.hexInfo.hex;
+                document.getElementById('colorSwatch').style.backgroundColor = s.hexInfo.swatch;
+            }
+            updateTrimUI();
+        }
+
+        function loadForPreview(index) {
+            if (isExporting) return;
+            // Save current settings before switching
+            if (currentFileIndex !== -1 && currentFileIndex < batchFiles.length) {
+                fileSettings[currentFileIndex] = getSettingsFromUI();
+                // Update previous UI item style
+                const prevItem = document.getElementById(`fileItem-${currentFileIndex}`);
+                if (prevItem) prevItem.classList.remove('border-blue-500', 'bg-blue-900/20');
+            }
+
+            currentFileIndex = index;
+            const item = document.getElementById(`fileItem-${index}`);
+            if (item) item.classList.add('border-blue-500', 'bg-blue-900/20');
+
+            const file = batchFiles[index];
+            if (sourceVideo.src) URL.revokeObjectURL(sourceVideo.src);
+            sourceVideo.src = URL.createObjectURL(file);
+
+            sourceVideo.onloadedmetadata = () => {
+                mainCanvas.width = sourceVideo.videoWidth;
+                mainCanvas.height = sourceVideo.videoHeight;
+
+                // Load existing settings OR Default (inherit sticky UI but reset Trim)
+                if (fileSettings[index]) {
+                    applySettingsToUI(fileSettings[index]);
+                } else {
+                    // Reset trims for new video, keep other UI settings "Sticky"
+                    trimStart = 0;
+                    trimEnd = sourceVideo.duration;
+                    updateTrimUI();
+                }
+
+                // Force visual update
+                sourceVideo.currentTime = trimStart;
+
+                if (!isPreviewLoopRunning) {
+                    isPreviewLoopRunning = true;
+                    requestAnimationFrame(previewLoop);
+                }
+            };
+        }
+
+        function pausePreview() {
+            sourceVideo.pause();
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+        }
+
+        function previewLoop() {
+            if (isExporting) { isPreviewLoopRunning = false; return; }
+            if (sourceVideo.currentTime < trimStart) sourceVideo.currentTime = trimStart;
+            if (sourceVideo.currentTime >= trimEnd) sourceVideo.currentTime = trimStart;
+
+            ctx.drawImage(sourceVideo, 0, 0);
+            const w = mainCanvas.width, h = mainCanvas.height;
+            const frame = ctx.getImageData(0, 0, w, h);
+            const kr = keyColor.r, kg = keyColor.g, kb = keyColor.b;
+            const tol = parseInt(ranges.tolerance.value);
+            const chokeAmount = parseInt(ranges.choke.value);
+            const d = frame.data;
+
+            // Preview logic doesn't strictly need to apply the specific watermark/fit options visibly
+            // as it's just for keying check, but we apply basic keying.
+
+            let minX = w, minY = h, maxX = 0, maxY = 0, hasVisible = false;
+
+            for (let i = 0; i < d.length; i += 4) {
+                const diff = getPreciseDistance(d[i], d[i + 1], d[i + 2], kr, kg, kb);
+                if (diff < tol) d[i + 3] = 0;
+                else if (diff < tol + 10) d[i + 3] = ((diff - tol) / 10) * 255;
+
+                if (d[i + 3] > 1) {
+                    const px = (i / 4) % w, py = Math.floor((i / 4) / w);
+                    if (px < minX) minX = px; if (px > maxX) maxX = px;
+                    if (py < minY) minY = py; if (py > maxY) maxY = py;
+                    hasVisible = true;
+                }
+            }
+
+            if (chokeAmount > 0 && hasVisible) {
+                const alphaCopy = new Uint8Array(w * h);
+                for (let i = 0; i < alphaCopy.length; i++) alphaCopy[i] = d[i * 4 + 3];
+                for (let y = minY; y <= maxY; y++) {
+                    for (let x = minX; x <= maxX; x++) {
+                        const idx = y * w + x;
+                        if (alphaCopy[idx] === 0) continue;
+                        let minAlpha = alphaCopy[idx];
+                        const yM = Math.max(0, y - chokeAmount), yX = Math.min(h - 1, y + chokeAmount);
+                        const xM = Math.max(0, x - chokeAmount), xX = Math.min(w - 1, x + chokeAmount);
+                        for (let ny = yM; ny <= yX; ny++) {
+                            for (let nx = xM; nx <= xX; nx++) {
+                                if (alphaCopy[ny * w + nx] < minAlpha) minAlpha = alphaCopy[ny * w + nx];
+                                if (minAlpha === 0) break;
+                            }
+                            if (minAlpha === 0) break;
+                        }
+                        d[idx * 4 + 3] = minAlpha;
+                    }
+                }
+            }
+
+            ctx.putImageData(frame, 0, 0);
+            timeDisplay.innerText = `${sourceVideo.currentTime.toFixed(2)}s / ${sourceVideo.duration ? sourceVideo.duration.toFixed(2) : 0}s`;
+            requestAnimationFrame(previewLoop);
+        }
+
+        function updateTrimUI() {
+            const dur = sourceVideo.duration || 1;
+            trimStart = Math.max(0, Math.min(trimStart, dur));
+            trimEnd = Math.max(0, Math.min(trimEnd, dur));
+            if (trimStart > trimEnd) trimStart = trimEnd;
+
+            const startPct = (trimStart / dur) * 100;
+            const endPct = (trimEnd / dur) * 100;
+
+            handleStart.style.left = `${startPct}%`;
+            handleEnd.style.left = `${endPct}%`;
+            trimHighlight.style.left = `${startPct}%`;
+            trimHighlight.style.width = `${endPct - startPct}%`;
+
+            trimHighlight.style.width = `${endPct - startPct}%`;
+
+            startTimeInput.value = trimStart.toFixed(2);
+            endTimeInput.value = trimEnd.toFixed(2);
+        }
+
+        // --- PERSISTENCE & SPEED LOGIC ---
+        function saveState() {
+            const selectedRes = Array.from(document.querySelectorAll('.res-chk:checked')).map(c => c.value);
+            const selectedFmt = [];
+            if (document.getElementById('fmtSheet').checked) selectedFmt.push('sheet');
+            if (document.getElementById('fmtSeq').checked) selectedFmt.push('seq');
+
+            const state = {
+                speed: speedInput.value,
+                tolerance: ranges.tolerance.value,
+                choke: ranges.choke.value,
+                autoFit: autoFitToggle.checked,
+                watermark: watermarkToggle.checked,
+                resolutions: selectedRes,
+                formats: selectedFmt,
+                gifExport: document.getElementById('fmtGif').checked,
+                gifBg: document.getElementById('gifHexDisplay').value,
+                multiPass: document.getElementById('multiPassToggle').checked,
+                multiPassSteps: parseInt(document.getElementById('multiPassSlider').value),
+                comment: commentBox.value,
+                color: { keyColor, hex: document.getElementById('hexDisplay').innerText, swatch: document.getElementById('colorSwatch').style.backgroundColor }
+            };
+            localStorage.setItem('chromaState', JSON.stringify(state));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('chromaState');
+            if (saved) {
+                try {
+                    const s = JSON.parse(saved);
+                    if (s.speed) { speedInput.value = s.speed; speedRange.value = s.speed; sourceVideo.playbackRate = parseFloat(s.speed); }
+                    if (s.tolerance) { ranges.tolerance.value = s.tolerance; vals.tolerance.innerText = s.tolerance; }
+                    if (s.choke) { ranges.choke.value = s.choke; vals.choke.innerText = s.choke + 'px'; }
+                    if (s.autoFit !== undefined) autoFitToggle.checked = s.autoFit;
+                    if (s.watermark !== undefined) watermarkToggle.checked = s.watermark;
+
+                    if (s.formats) {
+                        document.getElementById('fmtSheet').checked = s.formats.includes('sheet');
+                        document.getElementById('fmtSeq').checked = s.formats.includes('seq');
+                    }
+
+                    if (s.gifExport !== undefined) {
+                        document.getElementById('fmtGif').checked = s.gifExport;
+                        if (s.gifExport) {
+                            document.getElementById('gifSettings').classList.remove('opacity-50', 'pointer-events-none');
+                        }
+                    }
+                    if (s.gifBg) {
+                        document.getElementById('gifBgColor').value = s.gifBg;
+                        document.getElementById('gifHexDisplay').value = s.gifBg;
+                    }
+
+                    if (s.resolutions) {
+                        document.querySelectorAll('.res-chk').forEach(c => c.checked = s.resolutions.includes(c.value));
+                        // Update "All" checkbox state
+                        const all = document.querySelectorAll('.res-chk');
+                        const checked = document.querySelectorAll('.res-chk:checked');
+                        document.getElementById('resAll').checked = all.length === checked.length;
+                    }
+                    if (s.multiPass !== undefined) {
+                        document.getElementById('multiPassToggle').checked = s.multiPass;
+                        document.getElementById('multiPassSettings').classList.toggle('opacity-50', !s.multiPass);
+                        document.getElementById('multiPassSettings').classList.toggle('pointer-events-none', !s.multiPass);
+                    }
+                    if (s.multiPassSteps) {
+                        document.getElementById('multiPassSlider').value = s.multiPassSteps;
+                        document.getElementById('multiPassVal').innerText = s.multiPassSteps;
+                    }
+
+                    if (s.comment) commentBox.value = s.comment;
+                    if (s.color) {
+                        keyColor = s.color.keyColor;
+                        document.getElementById('hexDisplay').innerText = s.color.hex;
+                        document.getElementById('colorSwatch').style.backgroundColor = s.color.swatch;
+                    }
+                } catch (e) { console.error("State load failed", e); }
+            }
+        }
+
+        // Hooks
+        speedRange.addEventListener('input', e => {
+            speedInput.value = e.target.value;
+            sourceVideo.playbackRate = parseFloat(e.target.value);
+            saveState();
+        });
+        speedInput.addEventListener('change', e => {
+            speedRange.value = e.target.value;
+            sourceVideo.playbackRate = parseFloat(e.target.value);
+            saveState();
+        });
+        [ranges.tolerance, ranges.choke, autoFitToggle, watermarkToggle, commentBox, document.getElementById('fmtSheet'), document.getElementById('fmtSeq')].forEach(el => {
+            el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', saveState);
+        });
+
+        // Resolution Checkboxes Logic
+        const resCheckboxes = document.querySelectorAll('.res-chk');
+        const resAll = document.getElementById('resAll');
+
+        resAll.addEventListener('change', e => {
+            resCheckboxes.forEach(c => c.checked = e.target.checked);
+            saveState();
+        });
+
+        resCheckboxes.forEach(c => {
+            c.addEventListener('change', () => {
+                const allChecked = Array.from(resCheckboxes).every(c => c.checked);
+                resAll.checked = allChecked;
+                saveState();
+            });
+        });
+
+        window.addEventListener('load', loadState);
+
+        let activeHandle = null;
+        function onHandleMove(e) {
+            if (!activeHandle) return;
+            const rect = trimTrack.getBoundingClientRect();
+            let pct = (e.clientX - rect.left) / rect.width;
+            pct = Math.max(0, Math.min(1, pct));
+            const time = pct * sourceVideo.duration;
+
+            if (activeHandle === 'start') {
+                trimStart = Math.min(time, trimEnd - 0.1);
+            } else {
+                trimEnd = Math.max(time, trimStart + 0.1);
+            }
+
+            pausePreview();
+            sourceVideo.currentTime = time;
+            updateTrimUI();
+        }
+
+        startTimeInput.addEventListener('change', (e) => {
+            trimStart = parseFloat(e.target.value) || 0;
+            pausePreview(); sourceVideo.currentTime = trimStart; updateTrimUI();
+        });
+        endTimeInput.addEventListener('change', (e) => {
+            trimEnd = parseFloat(e.target.value) || sourceVideo.duration;
+            pausePreview(); sourceVideo.currentTime = trimEnd; updateTrimUI();
+        });
+
+        window.addEventListener('mouseup', () => activeHandle = null);
+        window.addEventListener('mousemove', onHandleMove);
+        handleStart.addEventListener('mousedown', () => activeHandle = 'start');
+        handleEnd.addEventListener('mousedown', () => activeHandle = 'end');
+
+        let isPickingGifBg = false;
+        mainCanvas.addEventListener('mousedown', e => {
+            const r = mainCanvas.getBoundingClientRect();
+            const x = (e.clientX - r.left) * (mainCanvas.width / r.width), y = (e.clientY - r.top) * (mainCanvas.height / r.height);
+            const p = ctx.getImageData(x, y, 1, 1).data;
+            const hex = `#${((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1).toUpperCase()}`;
+
+            if (isPickingGifBg) {
+                document.getElementById('gifBgColor').value = hex;
+                document.getElementById('gifHexDisplay').value = hex;
+                isPickingGifBg = false;
+                mainCanvas.style.cursor = 'crosshair';
+                return;
+            }
+
+            keyColor = { r: p[0], g: p[1], b: p[2] };
+            document.getElementById('colorSwatch').style.backgroundColor = `rgb(${p[0]},${p[1]},${p[2]})`;
+            document.getElementById('hexDisplay').innerText = hex;
+        });
+
+        // GIF UI Hooks
+        const fmtGif = document.getElementById('fmtGif');
+        const gifSettings = document.getElementById('gifSettings');
+        const gifBgColor = document.getElementById('gifBgColor');
+        const gifHex = document.getElementById('gifHexDisplay');
+        const gifDropper = document.getElementById('gifEyeDropper');
+
+        fmtGif.addEventListener('change', () => {
+            gifSettings.classList.toggle('opacity-50', !fmtGif.checked);
+            gifSettings.classList.toggle('pointer-events-none', !fmtGif.checked);
+            saveState();
+        });
+
+        gifBgColor.addEventListener('input', (e) => { gifHex.value = e.target.value; saveState(); });
+        gifHex.addEventListener('input', (e) => { gifBgColor.value = e.target.value; saveState(); });
+
+        gifDropper.addEventListener('click', () => {
+            isPickingGifBg = true;
+            mainCanvas.style.cursor = 'copy';
+        });
+
+        const multiPassSlider = document.getElementById('multiPassSlider');
+        const multiPassVal = document.getElementById('multiPassVal');
+        const multiPassToggle = document.getElementById('multiPassToggle');
+
+        multiPassToggle.addEventListener('change', () => {
+            document.getElementById('multiPassSettings').classList.toggle('opacity-50', !multiPassToggle.checked);
+            document.getElementById('multiPassSettings').classList.toggle('pointer-events-none', !multiPassToggle.checked);
+            saveState();
+        });
+        multiPassSlider.addEventListener('input', e => {
+            multiPassVal.innerText = e.target.value;
+            saveState();
+        });
+
+        async function getGifWorkerBlob() {
+            try {
+                const response = await fetch('https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js');
+                const text = await response.text();
+                return URL.createObjectURL(new Blob([text], { type: 'application/javascript' }));
+            } catch (e) { return 'https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.worker.js'; }
+        }
+
+        ranges.tolerance.oninput = () => vals.tolerance.innerText = ranges.tolerance.value;
+        ranges.choke.oninput = () => vals.choke.innerText = ranges.choke.value + 'px';
+
+        playPauseBtn.onclick = () => {
+            if (sourceVideo.paused) { sourceVideo.play(); playIcon.classList.add('hidden'); pauseIcon.classList.remove('hidden'); }
+            else { pausePreview(); }
+        };
+
+        // --- PREVIEW LOGIC ---
+        function pausePreview() {
+            sourceVideo.pause();
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+        }
+
+        document.getElementById('exportBtn').onclick = async () => {
+            isExporting = true;
+            sourceVideo.pause();
+            document.getElementById('statusModal').classList.remove('hidden');
+            document.getElementById('statusDetail').innerText = ""; // Clear detail on start
+
+            // Save currently active settings before starting
+            fileSettings[currentFileIndex] = getSettingsFromUI();
+
+            const zip = new JSZip();
+            const fps = 24;
+
+            // Gather GLOBAL export settings (Formats & Resolutions apply to ALL)
+            const globalSelectedSizes = Array.from(document.querySelectorAll('.res-chk:checked')).map(c => c.value);
+            const globalReqFormats = [];
+            if (document.getElementById('fmtSheet').checked) globalReqFormats.push('sheet');
+            if (document.getElementById('fmtSeq').checked) globalReqFormats.push('seq');
+            const doGif = document.getElementById('fmtGif').checked;
+            const gifBg = document.getElementById('gifHexDisplay').value;
+
+            if (globalSelectedSizes.length === 0) { alert("Please select at least one resolution."); isExporting = false; document.getElementById('statusModal').classList.add('hidden'); return; }
+            if (globalReqFormats.length === 0 && !doGif) { alert("Please select at least one format (Sheet, Sequence, or GIF)."); isExporting = false; document.getElementById('statusModal').classList.add('hidden'); return; }
+
+            const doMultiPass = document.getElementById('multiPassToggle').checked;
+            const multiPassTotalSteps = parseInt(document.getElementById('multiPassSlider').value) || 4;
+
+            // Prep GIF Worker Blob if needed
+            let gifWorkerUrl = null;
+            if (doGif) gifWorkerUrl = await getGifWorkerBlob();
+
+            for (let i = 0; i < batchFiles.length; i++) {
+                const file = batchFiles[i];
+                // Use stored settings OR fallback to current UI (sticky)
+                // Note: getSettingsFromUI reads the DOM, so passing `getSettingsFromUI()` as default 
+                // means "if I haven't clicked it, use the settings nicely visible on screen RIGHT NOW"
+                const settings = fileSettings[i] || getSettingsFromUI();
+
+                const baseName = file.name.split('.')[0];
+                document.getElementById('currentFileName').innerText = file.name;
+                document.getElementById('batchBar').style.width = `${(i / batchFiles.length) * 100}%`;
+                document.getElementById('batchText').innerText = `${Math.round((i / batchFiles.length) * 100)}%`;
+
+                if (sourceVideo.src) URL.revokeObjectURL(sourceVideo.src);
+                sourceVideo.src = URL.createObjectURL(file);
+                await new Promise(r => sourceVideo.onloadedmetadata = r);
+
+                const startT = settings.trimStart;
+                const endT = settings.trimEnd > settings.trimStart ? settings.trimEnd : sourceVideo.duration;
+                const activeDuration = endT - startT;
+                const totalFrames = Math.floor(activeDuration * fps);
+                const vW = sourceVideo.videoWidth, vH = sourceVideo.videoHeight;
+
+                const workerSettings = {
+                    keyColor: settings.keyColor,
+                    tolerance: settings.tolerance,
+                    smoothness: 10,
+                    chokeAmount: settings.choke,
+                    removeWatermark: settings.watermark,
+                    autoCrop: settings.autoFit
+                };
+
+                // --- PASS 1 (SCAN) ---
+                // Only run tracking if Auto-Fit is enabled
+                let globalBBox = { minX: 0, minY: 0, maxX: vW, maxY: vH };
+
+                const sCanvas = document.createElement('canvas'); sCanvas.width = vW; sCanvas.height = vH;
+                const sCtx = sCanvas.getContext('2d', { willReadFrequently: true });
+
+                if (settings.autoFit) {
+                    document.getElementById('statusTitle').innerText = "Scanning Motion";
+                    document.getElementById('passTypeLabel').innerText = "Bounding Box Pass";
+                    document.getElementById('statusDetail').innerText = "Analyzing frames for content bounds...";
+
+                    // Reset BBox for scanning
+                    globalBBox = { minX: vW, minY: vH, maxX: 0, maxY: 0 };
+                    let scanned = 0;
+
+                    const scanComplete = new Promise(res => {
+                        workerPool.forEach(w => w.onmessage = e => {
+                            if (e.data.bbox) {
+                                globalBBox.minX = Math.min(globalBBox.minX, e.data.bbox.minX);
+                                globalBBox.minY = Math.min(globalBBox.minY, e.data.bbox.minY);
+                                globalBBox.maxX = Math.max(globalBBox.maxX, e.data.bbox.maxX);
+                                globalBBox.maxY = Math.max(globalBBox.maxY, e.data.bbox.maxY);
+                            }
+                            scanned++;
+                            const perc = Math.round((scanned / totalFrames) * 100);
+                            document.getElementById('procBar').style.width = perc + '%';
+                            document.getElementById('procText').innerText = perc + '%';
+                            document.getElementById('statusDetail').innerText = `Scanned Frame ${scanned}/${totalFrames}`;
+                            if (scanned === totalFrames) res();
+                        });
+                    });
+
+                    for (let f = 0; f < totalFrames; f++) {
+                        sourceVideo.currentTime = startT + (f / fps);
+                        await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
+                        sCtx.drawImage(sourceVideo, 0, 0);
+                        const img = sCtx.getImageData(0, 0, vW, vH);
+                        workerPool[f % threads].postMessage({ ...workerSettings, imageData: img, id: f, needsImage: false }, [img.data.buffer]);
+                    }
+                    await scanComplete;
+                }
+
+                // --- PASS 2 (RENDER) ---
+                document.getElementById('statusTitle').innerText = "Rendering Output";
+                document.getElementById('passTypeLabel').innerText = "Process & Scale";
+                document.getElementById('statusDetail').innerText = "Preparing frames for export...";
+
+                // Use GLOBAL export settings for formatting and sizing
+                // (reqFormats and selectedSizes are read before the loop starts)
+
+                // Determine Output Targets
+                const tasks = [];
+                const cols = Math.ceil(Math.sqrt(totalFrames));
+                const rows = Math.ceil(totalFrames / cols);
+
+                const imgRoot = zip.folder(baseName);
+
+                // SORT TASKS LARGEST -> SMALLEST for Cascading
+                // We need to resolve 'Original' to pixels to sort correctly
+                const sortedSizes = globalSelectedSizes.map(s => {
+                    return {
+                        val: s,
+                        px: s === 'original' ? vW : parseInt(s)
+                    };
+                }).sort((a, b) => b.px - a.px); // Descending
+
+                // Prepare Tasks Objects respecting sorted order
+                sortedSizes.forEach((sizeObj) => {
+                    const tW = sizeObj.px;
+                    const realH = sizeObj.val === 'original' ? vH : parseInt(sizeObj.val);
+                    const sizeLabel = sizeObj.val === 'original' ? 'Original' : `${tW}x${realH}`;
+
+                    if (globalReqFormats.includes('sheet')) {
+                        const sFolder = imgRoot.folder("Spritesheet").folder(sizeLabel);
+                        const cvs = document.createElement('canvas');
+                        cvs.width = cols * tW; cvs.height = rows * realH;
+                        tasks.push({
+                            type: 'sheet', w: tW, h: realH,
+                            canvas: cvs, ctx: cvs.getContext('2d'),
+                            folder: sFolder, cols,
+                            label: sizeLabel
+                        });
+                    }
+                    if (globalReqFormats.includes('seq')) {
+                        const sFolder = imgRoot.folder("PNG_Sequence").folder(sizeLabel);
+                        tasks.push({
+                            type: 'seq', w: tW, h: realH,
+                            folder: sFolder,
+                            label: sizeLabel
+                        });
+                    }
+                    if (doGif) {
+                        const sFolder = imgRoot.folder("GIF").folder(sizeLabel);
+                        const gif = new GIF({
+                            workers: 2,
+                            quality: 1, // 1 = Best quality (lowest number)
+                            width: tW,
+                            height: realH,
+                            workerScript: gifWorkerUrl,
+                            background: gifBg
+                        });
+                        tasks.push({
+                            type: 'gif', w: tW, h: realH,
+                            folder: sFolder,
+                            label: sizeLabel,
+                            gifObj: gif
+                        });
+                    }
+                });
+
+                let rendered = 0;
+                const renderComplete = new Promise(res => {
+                    workerPool.forEach(w => w.onmessage = async e => {
+                        const { imageData, id } = e.data;
+
+                        // 1. CREATE CLEAN SOURCE (Apply Auto-Fit Crop if needed)
+                        // We put raw image on temp
+                        const rawC = document.createElement('canvas');
+                        rawC.width = vW; rawC.height = vH;
+                        rawC.getContext('2d').putImageData(imageData, 0, 0);
+
+                        let cleanSource;
+                        if (settings.autoFit) {
+                            const bW = (globalBBox.maxX - globalBBox.minX) || 1;
+                            const bH = (globalBBox.maxY - globalBBox.minY) || 1;
+
+                            cleanSource = document.createElement('canvas');
+                            cleanSource.width = bW; cleanSource.height = bH;
+                            cleanSource.getContext('2d').drawImage(rawC, globalBBox.minX, globalBBox.minY, bW, bH, 0, 0, bW, bH);
+                        } else {
+                            cleanSource = rawC;
+                        }
+
+                        // 2. CASCADE PROCESSING
+                        // We group tasks by size to process efficiently
+                        const sizeGroups = [];
+                        tasks.forEach(t => {
+                            let g = sizeGroups.find(x => x.w === t.w && x.h === t.h);
+                            if (!g) { g = { w: t.w, h: t.h, tasks: [] }; sizeGroups.push(g); }
+                            g.tasks.push(t);
+                        });
+
+                        let currentSourceForCascade = cleanSource;
+                        let prevGroupWidth = cleanSource.width;
+
+                        // Now iterate Size Groups (Large -> Small)
+                        for (let gIdx = 0; gIdx < sizeGroups.length; gIdx++) {
+                            const group = sizeGroups[gIdx];
+
+                            let steps = 0;
+                            if (doMultiPass && sizeGroups.length > 1) {
+                                // Distribute total steps across the "gaps" between sizes
+                                // For N sizes, there are N-1 gaps.
+                                steps = Math.ceil(multiPassTotalSteps / (sizeGroups.length - 1));
+                            }
+
+                            // Calculate scale to fit `currentSourceForCascade` into `group` dimensions
+                            const sW = currentSourceForCascade.width, sH = currentSourceForCascade.height;
+                            const tW = group.w, tH = group.h;
+
+                            // Calculate the scale factor to fit the source content into the target dimensions
+                            // preserving aspect ratio. Add a small margin if autoFit is enabled.
+                            const scale = Math.min(tW / sW, tH / sH) * (settings.autoFit ? 0.95 : 1.0);
+
+                            const fitW = Math.floor(sW * scale);
+                            const fitH = Math.floor(sH * scale);
+
+                            // Step 1: High Quality Resizing
+                            // If "Multi-Pass" is on, we use Hermite (Pro). If off, we use Standard Canvas (Fast).
+                            let contentResized;
+
+                            if (doMultiPass && fitW < currentSourceForCascade.width) {
+                                // Ignore "steps" slider for the algorithm itself (Hermite is 1-pass but expensive)
+                                // We repurpose "Passes" slider in UI just to enable this mode locally
+                                contentResized = await resampleHermite(currentSourceForCascade, fitW, fitH, (row, total) => {
+                                    // Only update text intermittently to save DOM calls
+                                    if (row % 20 === 0) document.getElementById('statusDetail').innerText = `Frame ${id + 1}/${totalFrames} • Resizing to ${tW}x${tH} • HQ Process ${Math.round(row / total * 100)}%`;
+                                });
+                            } else {
+                                // Standard Canvas Scaling (Fast)
+                                const c = document.createElement('canvas'); c.width = fitW; c.height = fitH;
+                                const ctx = c.getContext('2d');
+                                ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; // Still try best
+                                ctx.drawImage(currentSourceForCascade, 0, 0, fitW, fitH);
+                                contentResized = c;
+                            }
+
+                            // Apply Sharpening if downscaling significantly
+                            if (fitW < sW) {
+                                applySharpen(contentResized.getContext('2d'), fitW, fitH, 0.15);
+                            }
+
+                            // Step 2: Place on a new canvas of the target group's full dimensions (tW, tH) and center it
+                            const finalC = document.createElement('canvas');
+                            finalC.width = tW; finalC.height = tH;
+                            const fCtx = finalC.getContext('2d');
+
+                            // Center the resized content on the target canvas
+                            const drawX = (tW - fitW) / 2;
+                            const drawY = (tH - fitH) / 2;
+                            fCtx.drawImage(contentResized, drawX, drawY, fitW, fitH);
+
+                            // Update Current for next cascade. Use the contentResized (tight fit)
+                            // as source for the next smaller size, to avoid accumulating margins.
+                            currentSourceForCascade = contentResized;
+
+                            // Distribute to tasks within this size group
+                            for (const task of group.tasks) {
+                                if (task.type === 'sheet') {
+                                    const sx = (id % task.cols) * task.w;
+                                    const sy = Math.floor(id / task.cols) * task.h;
+                                    task.ctx.drawImage(finalC, sx, sy);
+                                } else if (task.type === 'seq') {
+                                    const blob = await new Promise(r => finalC.toBlob(r, 'image/png'));
+                                    task.folder.file(`frame_${id.toString().padStart(5, '0')}.png`, blob);
+                                } else if (task.type === 'gif') {
+                                    // For GIF, we need to composite on the bg color
+                                    // The finalC already has the content centered.
+                                    // We need to draw it onto a new canvas with the background.
+                                    const gifFrameCanvas = document.createElement('canvas');
+                                    gifFrameCanvas.width = task.w;
+                                    gifFrameCanvas.height = task.h;
+                                    const gCtx = gifFrameCanvas.getContext('2d');
+
+                                    // Draw the content (which is already scaled and centered on finalC)
+                                    gCtx.drawImage(finalC, 0, 0);
+
+                                    // Apply background color underneath
+                                    gCtx.globalCompositeOperation = 'destination-over';
+                                    gCtx.fillStyle = gifBg;
+                                    gCtx.fillRect(0, 0, task.w, task.h);
+                                    gCtx.globalCompositeOperation = 'source-over'; // reset
+
+                                    task.gifObj.addFrame(gifFrameCanvas, { delay: 1000 / fps, copy: true });
+                                }
+                            }
+                        }
+
+                        rendered++;
+                        const perc = Math.round((rendered / totalFrames) * 100);
+                        document.getElementById('procBar').style.width = perc + '%';
+                        document.getElementById('procText').innerText = perc + '%';
+                        document.getElementById('statusDetail').innerText = `Processed Frame ${rendered}/${totalFrames}`;
+
+                        if (rendered === totalFrames) res();
+                    });
+                });
+
+                for (let f = 0; f < totalFrames; f++) {
+                    sourceVideo.currentTime = startT + (f / fps);
+                    await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
+                    sCtx.drawImage(sourceVideo, 0, 0);
+                    const img = sCtx.getImageData(0, 0, vW, vH);
+                    workerPool[f % threads].postMessage({ ...workerSettings, imageData: img, id: f, needsImage: true }, [img.data.buffer]);
+                }
+                await renderComplete;
+
+                // Finalize - Save Sheets and Info txts
+                const playbackSpeed = settings.speed;
+                const standardFPS = fps * playbackSpeed;
+                const userComment = settings.comment;
+
+                // Process Metadata & GIF Rendering
+                // GIF rendering is async, so we track promises
+                const finalPromises = tasks.map(async (task) => {
+                    // Metadata
+                    const meta = `PROJECT: Maxymax MP4 To Spritesheet/PNG
+TARGET: ${baseName}
+FORMAT: ${task.type === 'sheet' ? 'Sprite Sheet' : (task.type === 'gif' ? 'GIF' : 'PNG Sequence')}
+SIZE: ${task.label} (${task.w}x${task.h}px)
+----------------------------------------
+Total Frames: ${totalFrames}
+${task.type === 'sheet' ? `Grid Layout: ${task.cols} columns x ${Math.ceil(totalFrames / task.cols)} rows` : ''}
+----------------------------------------
+PLAYBACK INFO:
+Original Capture FPS: ${fps}
+Playback Speed Multiplier: ${playbackSpeed}x
+Target Playback FPS: ${standardFPS.toFixed(2)}
+----------------------------------------
+USER COMMENTS:
+${userComment || "No comments."}`;
+
+                    task.folder.file(`${baseName}_info.txt`, meta);
+
+                    if (task.type === 'sheet') {
+                        const sheetBlob = await new Promise(r => task.canvas.toBlob(r, 'image/png'));
+                        task.folder.file(`${baseName}_${task.label}_sheet.png`, sheetBlob);
+                    } else if (task.type === 'gif') {
+                        document.getElementById('statusDetail').innerText = `Rendering GIF (${task.label})...`;
+                        task.gifObj.render();
+                        task.gifObj.on('progress', p => {
+                            // Because multiple GIFs might render, this bar might look jumpy if we don't coordinate,
+                            // but it's better than 100% stuck. 
+                            // Ideally we average them, but sequential awaiting is safer for memory.
+                            document.getElementById('procBar').style.width = (p * 100) + '%';
+                            document.getElementById('procText').innerText = Math.round(p * 100) + '%';
+                        });
+                        const gifBlob = await new Promise(r => task.gifObj.on('finished', r));
+                        task.folder.file(`${baseName}_${task.label}.gif`, gifBlob);
+                    }
+                });
+
+                await Promise.all(finalPromises);
+            }
+            document.getElementById('statusTitle').innerText = "Compressing Bundle";
+            document.getElementById('statusDetail').innerText = "Creating Zip File...";
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
+            // Naming Logic: If single file, use valid name. If batch, use generic.
+            link.download = batchFiles.length === 1
+                ? `${batchFiles[0].name.split('.')[0]}_Export.zip`
+                : `Maxymax_Batch_Export_${Date.now()}.zip`;
+
+            link.click();
+            document.getElementById('statusModal').classList.add('hidden'); isExporting = false; loadForPreview(currentFileIndex);
+
+            // Toast
+            const t = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = "Export Complete Successfully";
+            t.classList.remove('opacity-0', 'translate-y-10');
+            setTimeout(() => t.classList.add('opacity-0', 'translate-y-10'), 3000);
+        };
+    </script>
+</body>
+
+</html>
