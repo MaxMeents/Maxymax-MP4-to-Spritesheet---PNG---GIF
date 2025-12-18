@@ -1698,6 +1698,12 @@ ${userComment || "No comments."}`;
 
                     task.folder.file(`${baseName}_info.txt`, meta);
 
+                    // Generate and save example preview
+                    try {
+                        const previewHtml = buildExportPreview(task, totalFrames, standardFPS, baseName);
+                        task.folder.file("example_preview.html", previewHtml);
+                    } catch (e) { console.error("Preview generation error:", e); }
+
                     if (task.type === 'sheet') {
                         const sheetBlob = await new Promise(r => task.canvas.toBlob(r, 'image/png'));
                         task.folder.file(`${baseName}_${task.label}_sheet.png`, sheetBlob);
@@ -1746,6 +1752,44 @@ ${userComment || "No comments."}`;
             document.getElementById('toastMsg').innerText = "Export Complete Successfully";
             t.classList.remove('opacity-0', 'translate-y-10');
             setTimeout(() => t.classList.add('opacity-0', 'translate-y-10'), 3000);
+        };
+    </script>
+    <script>
+        /**
+         * Generates the example_preview.html content for exported assets.
+         * Separated into its own script block to keep the main export logic clean.
+         */
+        const buildExportPreview = (task, totalFrames, standardFPS, baseName) => {
+            const style = `
+                body { background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }
+                .card { background: #1e293b; padding: 2.5rem; border-radius: 1.5rem; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; gap: 1.5rem; max-width: 600px; }
+                .asset { background: #000; border: 4px solid #334155; border-radius: 0.5rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.1); }
+                .pill { background: #38bdf8; color: #000; padding: 0.4rem 1rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+                .hint { color: #94a3b8; font-size: 0.9rem; line-height: 1.6; border-top: 1px solid #334155; padding-top: 1.5rem; margin-top: 0.5rem; }
+                code { background: #000; color: #38bdf8; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; }
+                h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: #fff; }
+            `;
+
+            let content = '';
+            let js = '';
+            let hint = '';
+
+            if (task.type === 'sheet') {
+                const file = `${baseName}_${task.label}_sheet.png`;
+                content = `<div class="asset" id="v" style="width:${task.w}px;height:${task.h}px;background:url('${file}') no-repeat;background-size:${task.w * task.cols}px auto"></div>`;
+                js = `const el=document.getElementById('v');let f=0;setInterval(()=>{el.style.backgroundPosition=\`-\${(f%${task.cols})*${task.w}}px -\${Math.floor(f/${task.cols})*${task.h}}px\`;f=(f+1)%${totalFrames}},1000/${standardFPS})`;
+                hint = `Sprite Sheet: Grid of <code>${task.cols}</code> columns. Animate via <code>background-position</code>.`;
+            } else if (task.type === 'seq') {
+                content = `<canvas class="asset" id="v" width="${task.w}" height="${task.h}"></canvas>`;
+                js = `const c=document.getElementById('v'),ctx=c.getContext('2d');let f=0,ld=0;const imgs=[];for(let i=0;i<${totalFrames};i++){const img=new Image();img.src='frame_'+String(i).padStart(5,'0')+'.png';img.onload=()=>ld++;imgs.push(img)}setInterval(()=>{if(ld<${totalFrames})return;ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(imgs[f],0,0);f=(f+1)%${totalFrames}},1000/${standardFPS})`;
+                hint = `PNG Sequence: Preload frames into an array and draw to <code>&lt;canvas&gt;</code> sequentially.`;
+            } else if (task.type === 'gif') {
+                const file = `${baseName}_${task.label}.gif`;
+                content = `<img class="asset" src="${file}" alt="GIF">`;
+                hint = `Standard GIF: Simply use an <code>&lt;img src="..."&gt;</code> tag.`;
+            }
+
+            return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Preview</title><style>${style}</style></head><body><div class="card"><div class="pill">${task.type.toUpperCase()}</div><h1>${task.label}</h1>${content}<div class="hint"><p>${hint}</p><p>Speed: <code>${standardFPS.toFixed(2)} FPS</code></p></div></div><script>${js}<\/script></body></html>`;
         };
     </script>
 </body>
