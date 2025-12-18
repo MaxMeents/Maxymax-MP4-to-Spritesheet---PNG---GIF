@@ -448,6 +448,20 @@
                                                         </svg>
                                                     </button>
                                                 </div>
+
+                                                <div class="mt-3">
+                                                    <div class="flex justify-between mb-1">
+                                                        <label
+                                                            class="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Quality
+                                                            (Speed)</label>
+                                                        <span id="gifQualityVal"
+                                                            class="text-[9px] text-pink-400 font-mono">10</span>
+                                                    </div>
+                                                    <input type="range" id="gifQualityRange" min="1" max="30" value="10"
+                                                        step="1"
+                                                        class="w-full h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-pink-500 [&::-webkit-slider-thumb]:rounded-full"
+                                                        title="Lower = Better Quality (Slower). Higher = Faster.">
+                                                </div>
                                             </div>
                                         </div>
                                     </label>
@@ -1115,6 +1129,7 @@
                 formats: selectedFmt,
                 gifExport: document.getElementById('fmtGif').checked,
                 gifBg: document.getElementById('gifHexDisplay').value,
+                gifQuality: document.getElementById('gifQualityRange').value,
                 multiPass: document.getElementById('multiPassToggle').checked,
                 multiPassSteps: parseInt(document.getElementById('multiPassSlider').value),
                 comment: commentBox.value,
@@ -1148,6 +1163,10 @@
                     if (s.gifBg) {
                         document.getElementById('gifBgColor').value = s.gifBg;
                         document.getElementById('gifHexDisplay').value = s.gifBg;
+                    }
+                    if (s.gifQuality) {
+                        document.getElementById('gifQualityRange').value = s.gifQuality;
+                        document.getElementById('gifQualityVal').innerText = s.gifQuality;
                     }
 
                     if (s.resolutions) {
@@ -1285,6 +1304,14 @@
             mainCanvas.style.cursor = 'copy';
         });
 
+        const gifQualityRange = document.getElementById('gifQualityRange');
+        const gifQualityVal = document.getElementById('gifQualityVal');
+        gifQualityRange.addEventListener('input', (e) => {
+            gifQualityVal.innerText = e.target.value;
+            saveState();
+        });
+
+
         const multiPassSlider = document.getElementById('multiPassSlider');
         const multiPassVal = document.getElementById('multiPassVal');
         const multiPassToggle = document.getElementById('multiPassToggle');
@@ -1341,6 +1368,7 @@
             if (document.getElementById('fmtSeq').checked) globalReqFormats.push('seq');
             const doGif = document.getElementById('fmtGif').checked;
             const gifBg = document.getElementById('gifHexDisplay').value;
+            const gifQuality = parseInt(document.getElementById('gifQualityRange').value) || 10;
 
             if (globalSelectedSizes.length === 0) { alert("Please select at least one resolution."); isExporting = false; document.getElementById('statusModal').classList.add('hidden'); return; }
             if (globalReqFormats.length === 0 && !doGif) { alert("Please select at least one format (Sheet, Sequence, or GIF)."); isExporting = false; document.getElementById('statusModal').classList.add('hidden'); return; }
@@ -1478,8 +1506,8 @@
                     if (doGif) {
                         const sFolder = imgRoot.folder("GIF").folder(sizeLabel);
                         const gif = new GIF({
-                            workers: 2,
-                            quality: 1, // 1 = Best quality (lowest number)
+                            workers: navigator.hardwareConcurrency || 4, // Use all available cores
+                            quality: gifQuality, // 1 = Best (Slow), 10 = Default, 30+ = Fast (Low Quality)
                             width: tW,
                             height: realH,
                             workerScript: gifWorkerUrl,
@@ -1678,7 +1706,9 @@ ${userComment || "No comments."}`;
                         if (task.tempFrames) {
                             for (let i = 0; i < totalFrames; i++) {
                                 if (task.tempFrames[i]) {
-                                    task.gifObj.addFrame(task.tempFrames[i], { delay: 1000 / fps, copy: true });
+                                    // Clamp delay to min 20ms (50fps) to avoid browser throttle (which defaults <20ms to 100ms/10fps)
+                                    const safeDelay = Math.max(20, 1000 / standardFPS);
+                                    task.gifObj.addFrame(task.tempFrames[i], { delay: safeDelay, copy: true });
                                 }
                             }
                         }
