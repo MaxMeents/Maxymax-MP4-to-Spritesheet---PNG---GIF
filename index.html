@@ -473,10 +473,7 @@
                                                 value="original"
                                                 class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
                                             <span class="text-xs text-slate-300">Original</span></label>
-                                        <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
-                                                value="128"
-                                                class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
-                                            <span class="text-xs text-slate-300">128px</span></label>
+
                                         <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox"
                                                 value="256"
                                                 class="res-chk form-checkbox text-blue-500 rounded border-slate-600 bg-slate-800">
@@ -1492,7 +1489,8 @@
                             type: 'gif', w: tW, h: realH,
                             folder: sFolder,
                             label: sizeLabel,
-                            gifObj: gif
+                            gifObj: gif,
+                            tempFrames: [] // Buffer for ordered frames
                         });
                     }
                 });
@@ -1620,7 +1618,8 @@
                                     gCtx.fillRect(0, 0, task.w, task.h);
                                     gCtx.globalCompositeOperation = 'source-over'; // reset
 
-                                    task.gifObj.addFrame(gifFrameCanvas, { delay: 1000 / fps, copy: true });
+                                    // Store frame in buffer instead of adding immediately
+                                    task.tempFrames[id] = gifFrameCanvas;
                                 }
                             }
                         }
@@ -1675,6 +1674,15 @@ ${userComment || "No comments."}`;
                         const sheetBlob = await new Promise(r => task.canvas.toBlob(r, 'image/png'));
                         task.folder.file(`${baseName}_${task.label}_sheet.png`, sheetBlob);
                     } else if (task.type === 'gif') {
+                        // Add buffered frames in order
+                        if (task.tempFrames) {
+                            for (let i = 0; i < totalFrames; i++) {
+                                if (task.tempFrames[i]) {
+                                    task.gifObj.addFrame(task.tempFrames[i], { delay: 1000 / fps, copy: true });
+                                }
+                            }
+                        }
+
                         document.getElementById('statusDetail').innerText = `Rendering GIF (${task.label})...`;
                         task.gifObj.render();
                         task.gifObj.on('progress', p => {
