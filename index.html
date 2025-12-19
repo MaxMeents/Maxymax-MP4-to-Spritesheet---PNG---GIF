@@ -392,6 +392,16 @@
                             Export Config</h3>
 
                         <div class="space-y-4 relative z-10">
+                            <!-- Export Naming -->
+                            <div class="mb-4">
+                                <label
+                                    class="block text-[10px] font-bold text-slate-400 uppercase mb-2 text-blue-400">Export
+                                    Name Override</label>
+                                <input type="text" id="exportNameInput"
+                                    class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-blue-500 transition-colors"
+                                    placeholder="Leave blank for original name">
+                            </div>
+
                             <!-- Format Selection -->
                             <div class="mb-4">
                                 <label class="block text-[10px] font-bold text-slate-400 uppercase mb-2">Export
@@ -571,6 +581,18 @@
                                         <input type="checkbox" id="watermarkToggle" checked
                                             class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-700 transition-all duration-300 left-0" />
                                         <label for="watermarkToggle"
+                                            class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-800 cursor-pointer border border-slate-700"></label>
+                                    </div>
+                                </div>
+
+                                <div class="flex items-center justify-between">
+                                    <label class="text-[10px] font-bold text-blue-300 uppercase">Reverse
+                                        Animation</label>
+                                    <div
+                                        class="relative inline-block w-10 h-5 align-middle select-none transition duration-200 ease-in">
+                                        <input type="checkbox" id="reverseToggle"
+                                            class="toggle-checkbox absolute block w-5 h-5 rounded-full bg-white border-4 appearance-none cursor-pointer border-slate-700 transition-all duration-300 left-0" />
+                                        <label for="reverseToggle"
                                             class="toggle-label block overflow-hidden h-5 rounded-full bg-slate-800 cursor-pointer border border-slate-700"></label>
                                     </div>
                                 </div>
@@ -794,10 +816,12 @@
         const speedRange = document.getElementById('speedRange');
         const speedInput = document.getElementById('speedInput');
         const commentBox = document.getElementById('commentBox');
+        const exportNameInput = document.getElementById('exportNameInput');
 
         // New Toggles
         const autoFitToggle = document.getElementById('autoFitToggle');
         const watermarkToggle = document.getElementById('watermarkToggle');
+        const reverseToggle = document.getElementById('reverseToggle');
 
         // Trim UI References
         const handleStart = document.getElementById('handleStart');
@@ -966,6 +990,8 @@
                 speed: parseFloat(speedInput.value) || 1.0,
                 autoFit: autoFitToggle.checked,
                 watermark: watermarkToggle.checked,
+                reverse: reverseToggle.checked,
+                exportName: exportNameInput.value,
                 resolutions: selectedRes,
                 formats: selectedFmt,
                 comment: commentBox.value,
@@ -986,6 +1012,8 @@
 
             autoFitToggle.checked = s.autoFit;
             watermarkToggle.checked = s.watermark;
+            reverseToggle.checked = s.reverse || false;
+            exportNameInput.value = s.exportName || '';
             commentBox.value = s.comment;
 
             if (s.formats) {
@@ -1023,6 +1051,7 @@
             const file = batchFiles[index];
             if (sourceVideo.src) URL.revokeObjectURL(sourceVideo.src);
             sourceVideo.src = URL.createObjectURL(file);
+            sourceVideo.loop = false;
 
             sourceVideo.onloadedmetadata = () => {
                 mainCanvas.width = sourceVideo.videoWidth;
@@ -1054,10 +1083,31 @@
             pauseIcon.classList.add('hidden');
         }
 
+        let lastPreviewUpdate = performance.now();
         function previewLoop() {
             if (isExporting) { isPreviewLoopRunning = false; return; }
-            if (sourceVideo.currentTime < trimStart) sourceVideo.currentTime = trimStart;
-            if (sourceVideo.currentTime >= trimEnd) sourceVideo.currentTime = trimStart;
+
+            const now = performance.now();
+            const delta = (now - lastPreviewUpdate) / 1000;
+            lastPreviewUpdate = now;
+
+            const isReversed = reverseToggle.checked;
+            const speed = parseFloat(speedInput.value) || 1.0;
+
+            if (isReversed) {
+                if (!sourceVideo.paused) sourceVideo.pause();
+                if (!activeHandle) {
+                    let nextT = sourceVideo.currentTime - (delta * speed);
+                    if (nextT < trimStart || nextT > trimEnd) nextT = trimEnd;
+                    sourceVideo.currentTime = nextT;
+                }
+            } else {
+                if (sourceVideo.currentTime < trimStart || sourceVideo.currentTime >= trimEnd) {
+                    sourceVideo.currentTime = trimStart;
+                }
+                // Only auto-play if the user isn't actively scrubbing a handle
+                if (sourceVideo.paused && !isExporting && !activeHandle) sourceVideo.play();
+            }
 
             ctx.drawImage(sourceVideo, 0, 0);
             const w = mainCanvas.width, h = mainCanvas.height;
@@ -1066,9 +1116,6 @@
             const tol = parseInt(ranges.tolerance.value);
             const chokeAmount = parseInt(ranges.choke.value);
             const d = frame.data;
-
-            // Preview logic doesn't strictly need to apply the specific watermark/fit options visibly
-            // as it's just for keying check, but we apply basic keying.
 
             let minX = w, minY = h, maxX = 0, maxY = 0, hasVisible = false;
 
@@ -1145,6 +1192,8 @@
                 choke: ranges.choke.value,
                 autoFit: autoFitToggle.checked,
                 watermark: watermarkToggle.checked,
+                reverse: reverseToggle.checked,
+                exportName: exportNameInput.value,
                 resolutions: selectedRes,
                 formats: selectedFmt,
                 gifExport: document.getElementById('fmtGif').checked,
@@ -1168,6 +1217,7 @@
                     if (s.choke) { ranges.choke.value = s.choke; vals.choke.innerText = s.choke + 'px'; }
                     if (s.autoFit !== undefined) autoFitToggle.checked = s.autoFit;
                     if (s.watermark !== undefined) watermarkToggle.checked = s.watermark;
+                    if (s.reverse !== undefined) reverseToggle.checked = s.reverse;
 
                     if (s.formats) {
                         document.getElementById('fmtSheet').checked = s.formats.includes('sheet');
@@ -1207,6 +1257,7 @@
                     }
 
                     if (s.comment) commentBox.value = s.comment;
+                    if (s.exportName !== undefined) exportNameInput.value = s.exportName;
                     if (s.color) {
                         keyColor = s.color.keyColor;
                         document.getElementById('hexDisplay').innerText = s.color.hex;
@@ -1227,7 +1278,7 @@
             sourceVideo.playbackRate = parseFloat(e.target.value);
             saveState();
         });
-        [ranges.tolerance, ranges.choke, autoFitToggle, watermarkToggle, commentBox, document.getElementById('fmtSheet'), document.getElementById('fmtSeq')].forEach(el => {
+        [ranges.tolerance, ranges.choke, autoFitToggle, watermarkToggle, reverseToggle, exportNameInput, commentBox, document.getElementById('fmtSheet'), document.getElementById('fmtSeq')].forEach(el => {
             el.addEventListener(el.type === 'checkbox' ? 'change' : 'input', saveState);
         });
 
@@ -1406,8 +1457,7 @@
                 // Note: getSettingsFromUI reads the DOM, so passing `getSettingsFromUI()` as default 
                 // means "if I haven't clicked it, use the settings nicely visible on screen RIGHT NOW"
                 const settings = fileSettings[i] || getSettingsFromUI();
-
-                const baseName = file.name.split('.')[0];
+                const baseName = settings.exportName || file.name.split('.')[0];
                 document.getElementById('currentFileName').innerText = file.name;
                 document.getElementById('batchBar').style.width = `${(i / batchFiles.length) * 100}%`;
                 document.getElementById('batchText').innerText = `${Math.round((i / batchFiles.length) * 100)}%`;
@@ -1465,7 +1515,8 @@
                     });
 
                     for (let f = 0; f < totalFrames; f++) {
-                        sourceVideo.currentTime = startT + (f / fps);
+                        const captureIdx = settings.reverse ? (totalFrames - 1 - f) : f;
+                        sourceVideo.currentTime = startT + (captureIdx / fps);
                         await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
                         sCtx.drawImage(sourceVideo, 0, 0);
                         const img = sCtx.getImageData(0, 0, vW, vH);
@@ -1683,7 +1734,8 @@
                 });
 
                 for (let f = 0; f < totalFrames; f++) {
-                    sourceVideo.currentTime = startT + (f / fps);
+                    const captureIdx = settings.reverse ? (totalFrames - 1 - f) : f;
+                    sourceVideo.currentTime = startT + (captureIdx / fps);
                     await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
                     sCtx.drawImage(sourceVideo, 0, 0);
                     const img = sCtx.getImageData(0, 0, vW, vH);
@@ -1760,8 +1812,11 @@ ${userComment || "No comments."}`;
             const blob = await zip.generateAsync({ type: 'blob' });
             const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
             // Naming Logic: If single file, use valid name. If batch, use generic.
+            const firstSettings = fileSettings[0] || getSettingsFromUI();
+            const firstBaseName = firstSettings.exportName || batchFiles[0].name.split('.')[0];
+
             link.download = batchFiles.length === 1
-                ? `${batchFiles[0].name.split('.')[0]}_Export.zip`
+                ? `${firstBaseName}_Export.zip`
                 : `Maxymax_Batch_Export_${Date.now()}.zip`;
 
             link.click();
