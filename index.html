@@ -208,8 +208,8 @@
                     class="text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-white via-blue-200 to-slate-400 mb-2 drop-shadow-2xl">
                     MAXYMAX <span class="text-blue-500">MP4 TO SPRITESHEET/PNG</span>
                 </h1>
-                <p class="text-blue-200/60 font-medium tracking-widest text-sm uppercase">Advanced AI Sprite Extraction
-                    Engine</p>
+                <p class="text-blue-200/60 font-medium tracking-widest text-sm uppercase">Advanced Sprite Extraction Tool
+                    </p>
             </div>
         </header>
 
@@ -233,7 +233,7 @@
                 </div>
                 <span class="text-2xl font-bold text-white group-hover:text-blue-200 transition-colors">Initialize
                     Footage</span>
-                <p class="text-sm text-slate-500 mt-3 font-mono">SUPPORTING: .MP4 .MOV // BATCH READY</p>
+                <p class="text-sm text-slate-500 mt-3 font-mono">SUPPORTING: Only .MP4 // BATCH READY</p>
             </label>
         </div>
 
@@ -1761,35 +1761,192 @@ ${userComment || "No comments."}`;
          */
         const buildExportPreview = (task, totalFrames, standardFPS, baseName) => {
             const style = `
-                body { background: #0f172a; color: #f8fafc; font-family: system-ui, -apple-system, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; text-align: center; }
-                .card { background: #1e293b; padding: 2.5rem; border-radius: 1.5rem; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); display: flex; flex-direction: column; align-items: center; gap: 1.5rem; max-width: 600px; }
-                .asset { background: #000; border: 4px solid #334155; border-radius: 0.5rem; overflow: hidden; box-shadow: inset 0 2px 4px 0 rgba(0,0,0,0.1); }
-                .pill { background: #38bdf8; color: #000; padding: 0.4rem 1rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
-                .hint { color: #94a3b8; font-size: 0.9rem; line-height: 1.6; border-top: 1px solid #334155; padding-top: 1.5rem; margin-top: 0.5rem; }
-                code { background: #000; color: #38bdf8; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; }
-                h1 { margin: 0; font-size: 1.5rem; font-weight: 700; color: #fff; }
+                :root { --accent: #38bdf8; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --dim: #94a3b8; --code-bg: #000; }
+                body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 40px 20px; }
+                .container { max-width: 900px; width: 100%; display: flex; flex-direction: column; gap: 40px; animation: fadeIn 0.8s ease-out; }
+                @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+                
+                .card { background: var(--card); border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
+                .pill { background: var(--accent); color: #000; padding: 8px 20px; border-radius: 100px; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+                .asset-frame { background: #000; padding: 15px; border-radius: 20px; border: 6px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+                .asset { display: block; border-radius: 4px; }
+                
+                .lesson { text-align: left; background: var(--card); border-radius: 24px; padding: 40px; border: 1px solid rgba(255,255,255,0.1); }
+                h1 { margin: 0; font-size: 32px; font-weight: 800; color: #fff; }
+                h2 { font-size: 22px; color: var(--accent); margin-top: 0; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+                p { line-height: 1.7; color: var(--dim); margin: 0 0 20px; font-size: 16px; }
+                
+                .code-box { background: var(--code-bg); border-radius: 12px; padding: 20px; margin: 15px 0; border: 1px solid #334155; position: relative; overflow-x: auto; }
+                .code-header { font-size: 12px; color: var(--accent); font-weight: 800; text-transform: uppercase; margin-bottom: 10px; opacity: 0.7; }
+                pre { margin: 0; font-family: 'Consolas', monospace; font-size: 14px; line-height: 1.5; color: #38bdf8; }
+                .comment { color: #64748b; font-style: italic; }
+                
+                .magic-step { margin-bottom: 30px; }
+                .magic-step:last-child { margin-bottom: 0; }
+                .magic-title { font-weight: 700; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+                .magic-num { background: var(--accent); color: #000; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
             `;
 
-            let content = '';
-            let js = '';
-            let hint = '';
+            let previewHtml = '';
+            let lessonHtml = '';
+            let scriptCode = '';
+            const frameDelay = Math.round(1000 / standardFPS);
 
             if (task.type === 'sheet') {
-                const file = `${baseName}_${task.label}_sheet.png`;
-                content = `<div class="asset" id="v" style="width:${task.w}px;height:${task.h}px;background:url('${file}') no-repeat;background-size:${task.w * task.cols}px auto"></div>`;
-                js = `const el=document.getElementById('v');let f=0;setInterval(()=>{el.style.backgroundPosition=\`-\${(f%${task.cols})*${task.w}}px -\${Math.floor(f/${task.cols})*${task.h}}px\`;f=(f+1)%${totalFrames}},1000/${standardFPS})`;
-                hint = `Sprite Sheet: Grid of <code>${task.cols}</code> columns. Animate via <code>background-position</code>.`;
+                const sheetUrl = `${baseName}_${task.label}_sheet.png`;
+                previewHtml = `<div class="asset" id="magic-window" style="width:${task.w}px; height:${task.h}px; background: url('${sheetUrl}') no-repeat; background-size:${task.w * task.cols}px auto;"></div>`;
+
+                lessonHtml = `
+                    <div class="magic-step">
+                        <div class="magic-title"><span class="magic-num">1</span> First, make a "Window"</div>
+                        <p>We use a <code>&lt;div&gt;</code> tag. It's like a square hole in a wall where we see the art.</p>
+                        <div class="code-box">
+                            <div class="code-header">HTML</div>
+                            <pre>&lt;div id="my-window"&gt;&lt;/div&gt;</pre>
+                        </div>
+                    </div>
+                    <div class="magic-step">
+                        <div class="magic-title"><span class="magic-num">2</span> Frame the Window with CSS</div>
+                        <p>We tell the window exactly how big it should be and put our long strip of art behind it.</p>
+                        <div class="code-box">
+                            <div class="code-header">CSS</div>
+                            <pre>#my-window {
+  width: ${task.w}px;
+  height: ${task.h}px;
+  background: url('${sheetUrl}');
+}</pre>
+                        </div>
+                    </div>
+                    <div class="magic-step">
+                        <div class="magic-title"><span class="magic-num">3</span> The "Magic Timer"</div>
+                        <p>This code slides the strip of art behind the window very fast. It feels like it's moving!</p>
+                        <div class="code-box">
+                            <div class="code-header">JAVASCRIPT</div>
+                            <pre><span class="comment">// 1. How many columns are on our sheet?</span>
+const cols = ${task.cols};
+<span class="comment">// 2. Keep track of which frame to show</span>
+let frame = 0;
+<span class="comment">// 3. Change frame every ${frameDelay} milliseconds</span>
+setInterval(() => {
+  const x = (frame % cols) * ${task.w};
+  const y = Math.floor(frame / cols) * ${task.h};
+  document.getElementById('my-window').style.backgroundPosition = \`-\${x}px -\${y}px\`;
+  frame = (frame + 1) % ${totalFrames};
+}, ${frameDelay});</pre>
+                        </div>
+                    </div>
+                `;
+
+                scriptCode = `
+                    const el = document.getElementById('magic-window');
+                    let f = 0;
+                    setInterval(() => {
+                        const x = (f % ${task.cols}) * ${task.w};
+                        const y = Math.floor(f / ${task.cols}) * ${task.h};
+                        el.style.backgroundPosition = \`-\${x}px -\${y}px\`;
+                        f = (f + 1) % ${totalFrames};
+                    }, ${frameDelay});
+                `;
+
             } else if (task.type === 'seq') {
-                content = `<canvas class="asset" id="v" width="${task.w}" height="${task.h}"></canvas>`;
-                js = `const c=document.getElementById('v'),ctx=c.getContext('2d');let f=0,ld=0;const imgs=[];for(let i=0;i<${totalFrames};i++){const img=new Image();img.src='frame_'+String(i).padStart(5,'0')+'.png';img.onload=()=>ld++;imgs.push(img)}setInterval(()=>{if(ld<${totalFrames})return;ctx.clearRect(0,0,c.width,c.height);ctx.drawImage(imgs[f],0,0);f=(f+1)%${totalFrames}},1000/${standardFPS})`;
-                hint = `PNG Sequence: Preload frames into an array and draw to <code>&lt;canvas&gt;</code> sequentially.`;
+                previewHtml = `<canvas class="asset" id="magic-board" width="${task.w}" height="${task.h}"></canvas>`;
+
+                lessonHtml = `
+                    <div class="magic-step">
+                        <div class="magic-title"><span class="magic-num">1</span> Create a "Drawing Board"</div>
+                        <p>A <code>&lt;canvas&gt;</code> is like a piece of paper the computer can draw on very fast.</p>
+                        <div class="code-box">
+                            <div class="code-header">HTML</div>
+                            <pre>&lt;canvas id="my-board" width="${task.w}" height="${task.h}"&gt;&lt;/canvas&gt;</pre>
+                        </div>
+                    </div>
+                    <div class="magic-step">
+                        <div class="magic-title"><span class="magic-num">2</span> Draw like a Flipbook</div>
+                        <p>We load all our pictures into a list, and then use a timer to draw them one by one!</p>
+                        <div class="code-box">
+                            <div class="code-header">JAVASCRIPT</div>
+                            <pre><span class="comment">// 1. Load all images first</span>
+const frames = [];
+for(let i=0; i< ${totalFrames}; i++) {
+  const img = new Image();
+  img.src = 'frame_' + String(i).padStart(5,'0') + '.png';
+  frames.push(img);
+}
+<span class="comment">// 2. Draw them on the board!</span>
+let frame = 0;
+setInterval(() => {
+  const ctx = document.getElementById('my-board').getContext('2d');
+  ctx.clearRect(0, 0, ${task.w}, ${task.h});
+  ctx.drawImage(frames[frame], 0, 0);
+  frame = (frame + 1) % ${totalFrames};
+}, ${frameDelay});</pre>
+                        </div>
+                    </div>
+                `;
+
+                scriptCode = `
+                    const canvas = document.getElementById('magic-board');
+                    const ctx = canvas.getContext('2d');
+                    const frames = [];
+                    let ld = 0;
+                    for(let i=0; i< ${totalFrames}; i++) {
+                        const img = new Image();
+                        img.src = 'frame_' + String(i).padStart(5, '0') + '.png';
+                        img.onload = () => ld++;
+                        frames.push(img);
+                    }
+                    let f = 0;
+                    setInterval(() => {
+                        if(ld < ${totalFrames}) return;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(frames[f], 0, 0);
+                        f = (f + 1) % ${totalFrames};
+                    }, ${frameDelay});
+                `;
+
             } else if (task.type === 'gif') {
-                const file = `${baseName}_${task.label}.gif`;
-                content = `<img class="asset" src="${file}" alt="GIF">`;
-                hint = `Standard GIF: Simply use an <code>&lt;img src="..."&gt;</code> tag.`;
+                const gifUrl = `${baseName}_${task.label}.gif`;
+                previewHtml = `<img class="asset" src="${gifUrl}" alt="GIF movie">`;
+
+                lessonHtml = `
+                    <div class="magic-step">
+                        <div class="magic-title"><span class="magic-num">1</span> The One-Step Magic</div>
+                        <p>GIF files are like magical self-playing movies. You only need ONE tag to show them!</p>
+                        <div class="code-box">
+                            <div class="code-header">HTML</div>
+                            <pre>&lt;img src="${gifUrl}" /&gt;</pre>
+                        </div>
+                    </div>
+                `;
             }
 
-            return `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Preview</title><style>${style}</style></head><body><div class="card"><div class="pill">${task.type.toUpperCase()}</div><h1>${task.label}</h1>${content}<div class="hint"><p>${hint}</p><p>Speed: <code>${standardFPS.toFixed(2)} FPS</code></p></div></div><script>${js}<\/script></body></html>`;
+            return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Magic Animation! - ${task.label}</title>
+    <style>${style}</style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="pill">${task.type === 'sheet' ? 'Sprite Sheet' : (task.type === 'seq' ? 'PNG Sequence' : 'GIF')}</div>
+            <h1>Your Artwork is Alive!</h1>
+            <div class="asset-frame">
+                ${previewHtml}
+            </div>
+            <p style="color:var(--accent); font-weight:700; margin-top:10px;">Speed: ${standardFPS.toFixed(1)} FPS</p>
+        </div>
+
+        <div class="lesson">
+            <h2>The Magic Behind the Scenes</h2>
+            <p>Ever wonder how these pictures move? It's just simple code! Here is exactly how we did it:</p>
+            ${lessonHtml}
+        </div>
+    </div>
+    <script>${scriptCode}<\/script>
+</body>
+</html>`;
         };
     </script>
 </body>
