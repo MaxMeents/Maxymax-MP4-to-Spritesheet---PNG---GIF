@@ -2,12 +2,14 @@
 <html lang="en">
 
 <head>
+    <script src="coi-serviceworker.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maxymax MP4 To Spritesheet/PNG</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+    <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
     <style>
         /* --- CORE THEME --- */
         body {
@@ -793,12 +795,17 @@
 
         let batchFiles = [];
         let fileSettings = []; // Stores settings object for each file index
-        let currentFileIndex = 0;
+        let currentFileIndex = -1;
         let keyColor = { r: 0, g: 255, b: 0 };
         let isExporting = false;
         let isPreviewLoopRunning = false;
         let trimStart = 0;
         let trimEnd = 1;
+
+        // FFmpeg Variables
+        let ffmpeg = null;
+        let isFFmpegLoading = false;
+        let movFrames = {}; // Cache for decoded .mov frames: { fileIndex: [ImageData, ...] }
 
         const threads = navigator.hardwareConcurrency || 4;
         const workerBlob = new Blob([document.getElementById('workerScript').textContent], { type: 'text/javascript' });
@@ -1034,6 +1041,101 @@
             updateTrimUI();
         }
 
+        async function initFFmpeg() {
+            if (ffmpeg) return ffmpeg;
+            if (isFFmpegLoading) {
+                while (isFFmpegLoading) await new Promise(r => setTimeout(r, 100));
+                return ffmpeg;
+            }
+            isFFmpegLoading = true;
+            try {
+                const { createFFmpeg } = FFmpeg;
+                ffmpeg = createFFmpeg({
+                    log: true,
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                });
+
+                await ffmpeg.load();
+                return ffmpeg;
+            } catch (err) {
+                console.error("FFmpeg load failed", err);
+                alert("FFmpeg failed to load. .mov support may not work. Ensure you are on a secure context (HTTPS/localhost).");
+                return null;
+            } finally {
+                isFFmpegLoading = false;
+            }
+        }
+
+        async function processMovFile(index) {
+            const file = batchFiles[index];
+            if (!file.name.toLowerCase().endsWith('.mov')) return;
+            if (movFrames[index]) return; // Already processed
+
+            document.getElementById('statusModal').classList.remove('hidden');
+            document.getElementById('procBar').style.width = '0%';
+            document.getElementById('passTypeLabel').innerText = "Decoding .MOV";
+            document.getElementById('statusDetail').innerText = "Loading FFmpeg...";
+
+            const ffmpeg = await initFFmpeg();
+            if (!ffmpeg) {
+                document.getElementById('statusModal').classList.add('hidden');
+                return;
+            }
+
+            const { fetchFile } = FFmpeg;
+            document.getElementById('statusDetail').innerText = "Preparing file...";
+            const fileName = 'input.mov';
+            ffmpeg.FS('writeFile', fileName, await fetchFile(file));
+
+            document.getElementById('statusDetail').innerText = "Extracting frames...";
+            // We use -vcodec png to preserve alpha. 
+            await ffmpeg.run('-i', fileName, '-vcodec', 'png', 'frame_%04d.png');
+
+            const files = ffmpeg.FS('readdir', '.');
+            const frameFiles = files.filter(f => f.startsWith('frame_') && f.endsWith('.png')).sort();
+
+            document.getElementById('statusDetail').innerText = `Consuming ${frameFiles.length} frames...`;
+            const frames = [];
+            const tempCanvas = document.createElement('canvas');
+            const tempCtx = tempCanvas.getContext('2d', { alpha: true });
+
+            for (let i = 0; i < frameFiles.length; i++) {
+                const data = ffmpeg.FS('readFile', frameFiles[i]);
+                const blob = new Blob([data.buffer], { type: 'image/png' });
+                const img = await new Promise((resolve) => {
+                    const im = new Image();
+                    im.onload = () => resolve(im);
+                    im.src = URL.createObjectURL(blob);
+                });
+
+                if (i === 0) {
+                    tempCanvas.width = img.width;
+                    tempCanvas.height = img.height;
+                }
+
+                tempCtx.clearRect(0, 0, tempCanvas.width, tempCanvas.height);
+                tempCtx.drawImage(img, 0, 0);
+                frames.push(tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height));
+
+                URL.revokeObjectURL(img.src);
+                ffmpeg.FS('unlink', frameFiles[i]);
+
+                if (i % 10 === 0) {
+                    const pct = Math.round((i / frameFiles.length) * 100);
+                    document.getElementById('procBar').style.width = pct + '%';
+                }
+            }
+
+            ffmpeg.FS('unlink', fileName);
+            movFrames[index] = frames;
+
+            document.getElementById('statusModal').classList.add('hidden');
+            // Update preview if this is the current file
+            if (currentFileIndex === index) {
+                sourceVideo.currentTime = trimStart; // Trigger refresh
+            }
+        }
+
         function loadForPreview(index) {
             if (isExporting) return;
             // Save current settings before switching
@@ -1049,6 +1151,13 @@
             if (item) item.classList.add('border-blue-500', 'bg-blue-900/20');
 
             const file = batchFiles[index];
+            const isMov = file.name.toLowerCase().endsWith('.mov');
+
+            if (isMov && !movFrames[index]) {
+                processMovFile(index);
+                // processMovFile will re-trigger refresh once done
+            }
+
             if (sourceVideo.src) URL.revokeObjectURL(sourceVideo.src);
             sourceVideo.src = URL.createObjectURL(file);
             sourceVideo.loop = false;
@@ -1056,6 +1165,12 @@
             sourceVideo.onloadedmetadata = () => {
                 mainCanvas.width = sourceVideo.videoWidth;
                 mainCanvas.height = sourceVideo.videoHeight;
+
+                // For .mov files, we use the decoded frames' dimensions
+                if (isMov && movFrames[index] && movFrames[index].length > 0) {
+                    mainCanvas.width = movFrames[index][0].width;
+                    mainCanvas.height = movFrames[index][0].height;
+                }
 
                 // Load existing settings OR Default (inherit sticky UI but reset Trim)
                 if (fileSettings[index]) {
@@ -1093,24 +1208,54 @@
 
             const isReversed = reverseToggle.checked;
             const speed = parseFloat(speedInput.value) || 1.0;
+            const frames = movFrames[currentFileIndex];
 
-            if (isReversed) {
-                if (!sourceVideo.paused) sourceVideo.pause();
-                if (!activeHandle) {
-                    let nextT = sourceVideo.currentTime - (delta * speed);
-                    if (nextT < trimStart || nextT > trimEnd) nextT = trimEnd;
+            if (frames) {
+                // Handle .mov decoded frames
+                const fps = 24; // Assume 24 or detect from duration
+                const duration = sourceVideo.duration || 1;
+                const totalFrames = frames.length;
+
+                if (!sourceVideo.paused && !activeHandle) {
+                    let nextT = sourceVideo.currentTime + (delta * speed * (isReversed ? -1 : 1));
+                    if (isReversed) {
+                        if (nextT < trimStart || nextT > trimEnd) nextT = trimEnd;
+                    } else {
+                        if (nextT >= trimEnd) nextT = trimStart;
+                    }
                     sourceVideo.currentTime = nextT;
                 }
-            } else {
-                if (sourceVideo.currentTime < trimStart || sourceVideo.currentTime >= trimEnd) {
-                    sourceVideo.currentTime = trimStart;
+
+                const frameIdx = Math.min(totalFrames - 1, Math.max(0, Math.floor((sourceVideo.currentTime / duration) * totalFrames)));
+                const frameData = frames[frameIdx];
+
+                // If dimensions changed (rare for same file but possible in future)
+                if (mainCanvas.width !== frameData.width || mainCanvas.height !== frameData.height) {
+                    mainCanvas.width = frameData.width;
+                    mainCanvas.height = frameData.height;
                 }
-                // Only auto-play if the user isn't actively scrubbing a handle
-                if (sourceVideo.paused && !isExporting && !activeHandle) sourceVideo.play();
+
+                ctx.putImageData(frameData, 0, 0);
+            } else {
+                if (isReversed) {
+                    if (!sourceVideo.paused) sourceVideo.pause();
+                    if (!activeHandle) {
+                        let nextT = sourceVideo.currentTime - (delta * speed);
+                        if (nextT < trimStart || nextT > trimEnd) nextT = trimEnd;
+                        sourceVideo.currentTime = nextT;
+                    }
+                } else {
+                    if (sourceVideo.currentTime < trimStart || sourceVideo.currentTime >= trimEnd) {
+                        sourceVideo.currentTime = trimStart;
+                    }
+                    // Only auto-play if the user isn't actively scrubbing a handle
+                    if (sourceVideo.paused && !isExporting && !activeHandle) sourceVideo.play();
+                }
+                ctx.drawImage(sourceVideo, 0, 0);
             }
 
-            ctx.drawImage(sourceVideo, 0, 0);
             const w = mainCanvas.width, h = mainCanvas.height;
+            if (w === 0 || h === 0) { requestAnimationFrame(previewLoop); return; }
             const frame = ctx.getImageData(0, 0, w, h);
             const kr = keyColor.r, kg = keyColor.g, kb = keyColor.b;
             const tol = parseInt(ranges.tolerance.value);
@@ -1516,10 +1661,19 @@
 
                     for (let f = 0; f < totalFrames; f++) {
                         const captureIdx = settings.reverse ? (totalFrames - 1 - f) : f;
-                        sourceVideo.currentTime = startT + (captureIdx / fps);
-                        await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
-                        sCtx.drawImage(sourceVideo, 0, 0);
-                        const img = sCtx.getImageData(0, 0, vW, vH);
+                        const isMov = file.name.toLowerCase().endsWith('.mov');
+                        const mFrames = movFrames[i];
+                        let img;
+
+                        if (isMov && mFrames) {
+                            const frameIdx = Math.min(mFrames.length - 1, Math.max(0, Math.floor((captureIdx / totalFrames) * mFrames.length)));
+                            img = mFrames[frameIdx];
+                        } else {
+                            sourceVideo.currentTime = startT + (captureIdx / fps);
+                            await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
+                            sCtx.drawImage(sourceVideo, 0, 0);
+                            img = sCtx.getImageData(0, 0, vW, vH);
+                        }
                         workerPool[f % threads].postMessage({ ...workerSettings, imageData: img, id: f, needsImage: false }, [img.data.buffer]);
                     }
                     await scanComplete;
@@ -1735,10 +1889,19 @@
 
                 for (let f = 0; f < totalFrames; f++) {
                     const captureIdx = settings.reverse ? (totalFrames - 1 - f) : f;
-                    sourceVideo.currentTime = startT + (captureIdx / fps);
-                    await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
-                    sCtx.drawImage(sourceVideo, 0, 0);
-                    const img = sCtx.getImageData(0, 0, vW, vH);
+                    const isMov = file.name.toLowerCase().endsWith('.mov');
+                    const mFrames = movFrames[i];
+                    let img;
+
+                    if (isMov && mFrames) {
+                        const frameIdx = Math.min(mFrames.length - 1, Math.max(0, Math.floor((captureIdx / totalFrames) * mFrames.length)));
+                        img = mFrames[frameIdx];
+                    } else {
+                        sourceVideo.currentTime = startT + (captureIdx / fps);
+                        await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
+                        sCtx.drawImage(sourceVideo, 0, 0);
+                        img = sCtx.getImageData(0, 0, vW, vH);
+                    }
                     workerPool[f % threads].postMessage({ ...workerSettings, imageData: img, id: f, needsImage: true }, [img.data.buffer]);
                 }
                 await renderComplete;
