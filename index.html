@@ -10,6 +10,9 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
     <script src="https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+    <!-- UPNG.js (+ pako) for lossless, maximally-compressed PNG output -->
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/upng-js@2.1.0/UPNG.js"></script>
     <style>
         /* --- CORE THEME --- */
         body {
@@ -1235,7 +1238,7 @@
             }
 
             const baseName = (settings.exportName || batchFiles[currentFileIndex].name.split('.')[0]).replace(/[^A-Za-z0-9_\-]/g, '_');
-            const blob = await new Promise(r => sheet.toBlob(r, 'image/png'));
+            const blob = await canvasToLosslessPngBlob(sheet);
             return {
                 blob,
                 meta: { cols, rows, frameW: fW, frameH: fH, count: totalFrames, baseName }
@@ -1450,6 +1453,26 @@
                 }
             }
             ctx.putImageData(id, 0, 0);
+        }
+
+        // Lossless PNG encoder. Uses UPNG.js when available (better filter heuristics +
+        // optimal deflate => smaller files at the SAME pixel fidelity as the browser's
+        // built-in encoder). Falls back to canvas.toBlob if UPNG isn't loaded.
+        async function canvasToLosslessPngBlob(canvas) {
+            if (typeof UPNG === 'undefined') {
+                return new Promise(r => canvas.toBlob(r, 'image/png'));
+            }
+            try {
+                const cctx = canvas.getContext('2d');
+                const id = cctx.getImageData(0, 0, canvas.width, canvas.height);
+                // cnum=0 -> full RGBA truecolor (lossless). UPNG picks the best filter row by row
+                // and runs zlib at max compression internally.
+                const ab = UPNG.encode([id.data.buffer], canvas.width, canvas.height, 0);
+                return new Blob([ab], { type: 'image/png' });
+            } catch (e) {
+                console.warn('UPNG.encode failed, falling back to toBlob:', e);
+                return new Promise(r => canvas.toBlob(r, 'image/png'));
+            }
         }
 
         // Hermite resizing for better quality than default canvas scaling
@@ -2586,7 +2609,7 @@
                                     const sy = Math.floor(id / task.cols) * task.h;
                                     task.ctx.drawImage(finalC, sx, sy);
                                 } else if (task.type === 'seq') {
-                                    const blob = await new Promise(r => finalC.toBlob(r, 'image/png'));
+                                    const blob = await canvasToLosslessPngBlob(finalC);
                                     task.folder.file(`frame_${id.toString().padStart(5, '0')}.png`, blob);
                                 } else if (task.type === 'gif') {
                                     // For GIF, we need to composite on the bg color
@@ -2680,7 +2703,7 @@ ${userComment || "No comments."}`;
                     } catch (e) { console.error("Preview generation error:", e); }
 
                     if (task.type === 'sheet') {
-                        const sheetBlob = await new Promise(r => task.canvas.toBlob(r, 'image/png'));
+                        const sheetBlob = await canvasToLosslessPngBlob(task.canvas);
                         task.folder.file(`${baseName}_${task.label}_sheet.png`, sheetBlob);
                     } else if (task.type === 'gif') {
                         // Add buffered frames in order
@@ -2712,7 +2735,11 @@ ${userComment || "No comments."}`;
             }
             document.getElementById('statusTitle').innerText = gridEnabled ? `Compressing Cell r${cellRow}c${cellCol}` : "Compressing Bundle";
             document.getElementById('statusDetail').innerText = "Creating Zip File...";
-            const blob = await zip.generateAsync({ type: 'blob' });
+            const blob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 9 } // max deflate; lossless
+            });
             const link = document.createElement('a'); link.href = URL.createObjectURL(blob);
             // Naming Logic: If single file, use valid name. If batch, use generic.
             const firstSettings = fileSettings[0] || getSettingsFromUI();
