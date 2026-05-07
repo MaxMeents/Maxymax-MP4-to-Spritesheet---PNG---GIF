@@ -313,6 +313,41 @@
                                 <div id="handleStart" class="trim-handle" title="Start Point"></div>
                                 <div id="handleEnd" class="trim-handle" title="End Point"></div>
                             </div>
+                            <!-- Forward + Reverse Section toggle -->
+                            <div class="flex items-center justify-between gap-4 mb-2 -mt-1">
+                                <label class="flex items-center gap-2 cursor-pointer text-[10px]">
+                                    <input type="checkbox" id="splitEnabledToggle" class="w-4 h-4 bg-slate-700 border-none rounded text-teal-500 focus:ring-0">
+                                    <span class="text-teal-300 uppercase font-bold tracking-wider">Forward + Reverse Section</span>
+                                </label>
+                                <span class="text-[9px] text-slate-500 italic">Plays main range forward, then the section below in reverse.</span>
+                            </div>
+                            <!-- Second (reverse) timeline bar -->
+                            <div id="reverseBar" class="hidden mb-3 px-1 py-2 rounded-lg border border-teal-500/20 bg-teal-900/10">
+                                <div class="relative py-4 select-none">
+                                    <div id="revTrack" class="trim-track">
+                                        <div id="revHighlight" class="trim-highlight" style="background: linear-gradient(90deg, #14b8a6, #0d9488); box-shadow: 0 0 10px rgba(20,184,166,0.5);"></div>
+                                    </div>
+                                    <div id="handleRevStart" class="trim-handle" title="Reverse Range Start"
+                                        style="background-color:#0f766e; border-color:#5eead4; box-shadow:0 0 10px rgba(20,184,166,0.6); animation:none;"></div>
+                                    <div id="handleRevEnd" class="trim-handle" title="Reverse Range End"
+                                        style="background-color:#0f766e; border-color:#5eead4; box-shadow:0 0 10px rgba(20,184,166,0.6); animation:none;"></div>
+                                </div>
+                                <div class="flex items-center justify-between gap-3 mt-1">
+                                    <div class="bg-slate-800/50 p-2 rounded-lg border border-teal-500/30">
+                                        <label class="block text-[10px] font-bold text-teal-300 uppercase mb-1 ml-1 tracking-wider">Rev Start</label>
+                                        <input type="number" id="revStartTimeInput" step="0.01" min="0"
+                                            class="w-20 bg-transparent border-none text-base font-mono text-teal-100 font-bold p-0 focus:ring-0 placeholder-slate-600"
+                                            placeholder="0.00">
+                                    </div>
+                                    <p class="text-[9px] text-slate-500 italic flex-1 text-center px-2">Played backwards: from <span class="text-teal-300">Rev End</span> back to <span class="text-teal-300">Rev Start</span>.</p>
+                                    <div class="bg-slate-800/50 p-2 rounded-lg border border-teal-500/30 text-right">
+                                        <label class="block text-[10px] font-bold text-teal-300 uppercase mb-1 mr-1 tracking-wider">Rev End</label>
+                                        <input type="number" id="revEndTimeInput" step="0.01" min="0"
+                                            class="w-20 bg-transparent border-none text-base font-mono text-teal-100 font-bold p-0 text-right focus:ring-0 placeholder-slate-600"
+                                            placeholder="0.00">
+                                    </div>
+                                </div>
+                            </div>
 
                             <!-- Inputs -->
                             <div class="flex items-center justify-between gap-4">
@@ -1413,6 +1448,22 @@
         // Trim UI References
         const handleStart = document.getElementById('handleStart');
         const handleEnd = document.getElementById('handleEnd');
+        const splitEnabledToggle = document.getElementById('splitEnabledToggle');
+        const reverseBar = document.getElementById('reverseBar');
+        const revTrack = document.getElementById('revTrack');
+        const revHighlight = document.getElementById('revHighlight');
+        const handleRevStart = document.getElementById('handleRevStart');
+        const handleRevEnd = document.getElementById('handleRevEnd');
+        const revStartTimeInput = document.getElementById('revStartTimeInput');
+        const revEndTimeInput = document.getElementById('revEndTimeInput');
+        // Forward + Reverse Section state. When enabled, the main bar plays forward, then
+        // the [revStart..revEnd] range plays backwards (from revEnd → revStart), then loops.
+        let revStart = null;
+        let revEnd = null;
+        let splitPhase = 'fwd'; // runtime: 'fwd' | 'rev'
+        // Set true on each phase flip so we wait for the long sourceVideo seek to land
+        // before resuming small per-frame steps. Cleared by the 'seeked' listener below.
+        let splitSeekPending = false;
         const trimTrack = document.getElementById('trimTrack');
         const trimHighlight = document.getElementById('trimHighlight');
         const startTimeInput = document.getElementById('startTimeInput');
@@ -1824,7 +1875,35 @@
             const previewStride = skipPreview + 1;
             const exportFps = 24;
             const previewFrameStep = previewStride / exportFps;
-            const useManualStep = isReversed || skipPreview > 0;
+            const splitOn = splitActive();
+            const useManualStep = isReversed || skipPreview > 0 || splitOn;
+
+            // Smooth phase advance: forward through [trimStart..trimEnd], then reverse
+            // through [revEnd..revStart], looping. Holds at the flip target until the
+            // browser finishes seeking (otherwise tiny rev-step writes keep cancelling
+            // the long jump and the canvas appears stuck on trimEnd).
+            const splitSmoothAdvance = (curT) => {
+                if (splitSeekPending) return curT;
+                const dir = splitPhase === 'fwd' ? 1 : -1;
+                let nt = curT + delta * speed * dir;
+                if (splitPhase === 'fwd') {
+                    if (nt >= trimEnd) {
+                        splitPhase = 'rev';
+                        // If revEnd is far from current playhead, mark seek pending.
+                        if (Math.abs(revEnd - curT) > 0.05) splitSeekPending = true;
+                        return revEnd;
+                    }
+                    if (nt < trimStart) nt = trimStart;
+                } else {
+                    if (nt <= revStart) {
+                        splitPhase = 'fwd';
+                        if (Math.abs(trimStart - curT) > 0.05) splitSeekPending = true;
+                        return trimStart;
+                    }
+                    if (nt > revEnd) nt = revEnd;
+                }
+                return nt;
+            };
             // Advance currentTime in `previewFrameStep` increments only when real-time accumulates enough.
             // Returns the new currentTime after wrapping at trim bounds, or null if no advance this tick.
             const stridedAdvance = (curT) => {
@@ -1848,7 +1927,9 @@
                 const duration = sourceVideo.duration || 1;
                 const totalFrames = frames.length;
 
-                if (!sourceVideo.paused && !activeHandle) {
+                if (splitOn && !activeHandle) {
+                    sourceVideo.currentTime = splitSmoothAdvance(sourceVideo.currentTime);
+                } else if (!sourceVideo.paused && !activeHandle) {
                     if (skipPreview > 0) {
                         const nt = stridedAdvance(sourceVideo.currentTime);
                         if (nt !== null) sourceVideo.currentTime = nt;
@@ -1877,7 +1958,9 @@
                 if (useManualStep) {
                     if (!sourceVideo.paused) sourceVideo.pause();
                     if (!activeHandle) {
-                        if (skipPreview > 0) {
+                        if (splitOn) {
+                            sourceVideo.currentTime = splitSmoothAdvance(sourceVideo.currentTime);
+                        } else if (skipPreview > 0) {
                             const nt = stridedAdvance(sourceVideo.currentTime);
                             if (nt !== null) sourceVideo.currentTime = nt;
                         } else {
@@ -1991,11 +2074,87 @@
             trimHighlight.style.left = `${startPct}%`;
             trimHighlight.style.width = `${endPct - startPct}%`;
 
-            trimHighlight.style.width = `${endPct - startPct}%`;
-
             startTimeInput.value = trimStart.toFixed(2);
             endTimeInput.value = trimEnd.toFixed(2);
+
+            // Place reverse-bar handles if enabled
+            if (splitEnabledToggle && splitEnabledToggle.checked && revStart !== null && revEnd !== null) {
+                revStart = Math.max(0, Math.min(dur, revStart));
+                revEnd   = Math.max(0, Math.min(dur, revEnd));
+                if (revStart >= revEnd) revEnd = Math.min(dur, revStart + 0.1);
+                const rsPct = (revStart / dur) * 100;
+                const rePct = (revEnd / dur) * 100;
+                handleRevStart.style.left = `${rsPct}%`;
+                handleRevEnd.style.left = `${rePct}%`;
+                revHighlight.style.left = `${rsPct}%`;
+                revHighlight.style.width = `${rePct - rsPct}%`;
+                revStartTimeInput.value = revStart.toFixed(2);
+                revEndTimeInput.value = revEnd.toFixed(2);
+            }
         }
+
+        // Returns true when the second-bar (reverse) section is active and valid.
+        function splitActive() {
+            return splitEnabledToggle.checked
+                && revStart !== null && revEnd !== null
+                && revEnd > revStart;
+        }
+
+        splitEnabledToggle.addEventListener('change', () => {
+            if (splitEnabledToggle.checked) {
+                const dur = sourceVideo.duration || 1;
+                if (revStart === null || revEnd === null || revEnd <= revStart) {
+                    // Default the reverse range to the second half of the trim
+                    const mid = (trimStart + trimEnd) / 2;
+                    revStart = Math.max(0, Math.min(dur - 0.1, mid));
+                    revEnd = Math.min(dur, trimEnd);
+                }
+                reverseBar.classList.remove('hidden');
+            } else {
+                reverseBar.classList.add('hidden');
+            }
+            splitPhase = 'fwd';
+            updateTrimUI();
+            saveState();
+        });
+
+        revStartTimeInput.addEventListener('change', e => {
+            const v = parseFloat(e.target.value);
+            if (!Number.isFinite(v)) return;
+            revStart = Math.max(0, v);
+            if (revEnd !== null && revStart >= revEnd) revStart = Math.max(0, revEnd - 0.1);
+            splitPhase = 'fwd'; updateTrimUI(); saveState();
+        });
+        revEndTimeInput.addEventListener('change', e => {
+            const v = parseFloat(e.target.value);
+            if (!Number.isFinite(v)) return;
+            revEnd = Math.max(0.01, v);
+            if (revStart !== null && revEnd <= revStart) revEnd = revStart + 0.1;
+            splitPhase = 'fwd'; updateTrimUI(); saveState();
+        });
+
+        // Drag for the reverse-bar handles. Uses the same window mousemove handler
+        // (onHandleMove) but interprets activeHandle differently.
+        function onRevHandleMove(e) {
+            if (activeHandle !== 'revStart' && activeHandle !== 'revEnd') return;
+            const rect = revTrack.getBoundingClientRect();
+            let pct = (e.clientX - rect.left) / rect.width;
+            pct = Math.max(0, Math.min(1, pct));
+            const time = pct * (sourceVideo.duration || 1);
+            if (activeHandle === 'revStart') {
+                revStart = Math.min(time, (revEnd ?? time) - 0.05);
+            } else {
+                revEnd = Math.max(time, (revStart ?? 0) + 0.05);
+            }
+            pausePreview();
+            sourceVideo.currentTime = time;
+            splitPhase = 'fwd';
+            updateTrimUI();
+            saveState();
+        }
+        window.addEventListener('mousemove', onRevHandleMove);
+        handleRevStart.addEventListener('mousedown', () => activeHandle = 'revStart');
+        handleRevEnd.addEventListener('mousedown', () => activeHandle = 'revEnd');
 
         // --- PERSISTENCE & SPEED LOGIC ---
         function saveState() {
@@ -2017,6 +2176,9 @@
                 trimStart: trimStart,
                 trimEnd: trimEnd,
                 manualSplit: manualSplit,
+                splitEnabled: splitEnabledToggle.checked,
+                revStart: revStart,
+                revEnd: revEnd,
                 exportName: exportNameInput.value,
                 resolutions: selectedRes,
                 formats: selectedFmt,
@@ -2051,6 +2213,12 @@
                         manualSplit = { x: s.manualSplit.x, y: s.manualSplit.y };
                         if (typeof updateClearSplitVis === 'function') updateClearSplitVis();
                         if (typeof renderSplitOverlay === 'function') renderSplitOverlay();
+                    }
+                    if (typeof s.revStart === 'number') revStart = s.revStart;
+                    if (typeof s.revEnd === 'number') revEnd = s.revEnd;
+                    if (s.splitEnabled) {
+                        splitEnabledToggle.checked = true;
+                        reverseBar.classList.remove('hidden');
                     }
 
                     if (s.formats) {
@@ -2142,8 +2310,11 @@
 
             if (activeHandle === 'start') {
                 trimStart = Math.min(time, trimEnd - 0.1);
-            } else {
+            } else if (activeHandle === 'end') {
                 trimEnd = Math.max(time, trimStart + 0.1);
+            } else {
+                // Not a top-bar handle (handled by onRevHandleMove)
+                return;
             }
 
             pausePreview();
@@ -2165,6 +2336,9 @@
 
         window.addEventListener('mouseup', () => activeHandle = null);
         window.addEventListener('mousemove', onHandleMove);
+
+        // Clear the split-flip seek-pending flag whenever the browser actually finishes a seek.
+        sourceVideo.addEventListener('seeked', () => { splitSeekPending = false; });
         handleStart.addEventListener('mousedown', () => activeHandle = 'start');
         handleEnd.addEventListener('mousedown', () => activeHandle = 'end');
 
@@ -2362,8 +2536,28 @@
                 const activeDuration = endT - startT;
                 const skip = Math.max(0, parseInt(settings.skipFrames) || 0);
                 const stride = skip + 1;
+
+                // Forward + Reverse Section: forward [trimStart..trimEnd], then reverse [revEnd..revStart].
+                const splitExport = splitEnabledToggle.checked
+                    && revStart !== null && revEnd !== null && revEnd > revStart;
+                const fwdCount = splitExport
+                    ? Math.max(0, Math.floor(activeDuration * fps / stride))
+                    : 0;
+                const revCount = splitExport
+                    ? Math.max(0, Math.floor((revEnd - revStart) * fps / stride))
+                    : 0;
                 const rawFrameCount = Math.floor(activeDuration * fps);
-                const totalFrames = Math.max(1, Math.floor(rawFrameCount / stride));
+                const totalFrames = splitExport
+                    ? Math.max(1, fwdCount + revCount)
+                    : Math.max(1, Math.floor(rawFrameCount / stride));
+
+                // captureIdx -> seconds in the original video timeline
+                const timeForCaptureIdx = (captureIdx) => {
+                    if (!splitExport) return startT + (captureIdx * stride / fps);
+                    if (captureIdx < fwdCount) return startT + captureIdx * stride / fps;
+                    const rIdx = captureIdx - fwdCount;
+                    return revEnd - rIdx * stride / fps;
+                };
                 const fullW = sourceVideo.videoWidth, fullH = sourceVideo.videoHeight;
                 const _cellRect = computeCellRectExport(cellCol, cellRow, fullW, fullH);
                 const cellW = _cellRect.cw, cellH = _cellRect.ch;
@@ -2422,12 +2616,14 @@
                         const mFrames = movFrames[i];
                         let img;
 
+                        const tCap = timeForCaptureIdx(captureIdx);
                         if (mFrames) {
-                            const frameIdx = Math.min(mFrames.length - 1, Math.max(0, Math.floor((captureIdx / totalFrames) * mFrames.length)));
+                            const dur = sourceVideo.duration || 1;
+                            const frameIdx = Math.min(mFrames.length - 1, Math.max(0, Math.floor((tCap / dur) * mFrames.length)));
                             const frameImg = mFrames[frameIdx];
                             img = gridEnabled ? cropImageDataToCell(frameImg, cellX, cellY, cellW, cellH) : frameImg;
                         } else {
-                            sourceVideo.currentTime = startT + (captureIdx * stride / fps);
+                            sourceVideo.currentTime = tCap;
                             await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
                             sCtx.drawImage(sourceVideo, cellX, cellY, cellW, cellH, 0, 0, cellW, cellH);
                             img = sCtx.getImageData(0, 0, cellW, cellH);
