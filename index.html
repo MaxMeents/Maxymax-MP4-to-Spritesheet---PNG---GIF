@@ -275,6 +275,9 @@
                             class="relative rounded-xl overflow-hidden checkerboard border border-slate-700 shadow-2xl">
                             <canvas id="mainCanvas" class="w-full h-auto block"></canvas>
 
+                            <!-- Manual split overlay (dotted cursor lines + persistent crosshair) -->
+                            <div id="splitOverlay" class="absolute inset-0 pointer-events-none"></div>
+
                             <!-- Overlay UI: Time & Play Controls -->
                             <div
                                 class="absolute bottom-0 left-0 right-0 p-4 flex items-end justify-between opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
@@ -351,8 +354,13 @@
                             </h3>
                             <span id="gridPreviewLabel" class="text-[10px] text-blue-300 font-mono">1×1</span>
                         </div>
+                        <div class="flex items-center gap-3 mb-3 text-[10px]">
+                            <span class="text-slate-400 uppercase font-bold tracking-wider whitespace-nowrap">Auto-Number:</span>
+                            <input type="range" id="cellNumOffset" min="1" max="5" step="1" value="1" class="flex-1 accent-pink-500">
+                            <span id="cellNumRange" class="font-mono text-pink-300 min-w-[80px] text-right">_1 - _4</span>
+                        </div>
                         <div id="gridPreviewGrid" class="grid gap-2"></div>
-                        <p class="text-[9px] text-slate-500 mt-2 font-mono">Each cell exports as a separate zip.</p>
+                        <p class="text-[9px] text-slate-500 mt-2 font-mono">Each cell exports as a separate zip. Slider re-numbers all cells in pages of 4.</p>
                     </div>
                 </div>
 
@@ -371,8 +379,11 @@
                                 class="flex items-center space-x-3 bg-slate-900/50 p-2 rounded-lg border border-slate-700">
                                 <div id="colorSwatch"
                                     class="w-10 h-10 rounded shadow-inner border border-slate-600 shrink-0 transition-colors duration-200"
-                                    style="background-color: #00ff00;"></div>
-                                <div id="hexDisplay" class="flex-1 text-xs font-mono text-blue-300">#00FF00</div>
+                                    style="background-color: transparent;"></div>
+                                <div id="hexDisplay" class="flex-1 text-xs font-mono text-slate-500">no key picked</div>
+                                <button id="clearKeyBtn" type="button"
+                                    class="px-2 py-1 text-[9px] font-bold uppercase tracking-wider bg-slate-800 hover:bg-rose-900/40 border border-slate-700 hover:border-rose-500/40 rounded text-slate-400 hover:text-rose-300 transition-colors"
+                                    title="Clear picked color">Clear</button>
                             </div>
                         </div>
 
@@ -637,6 +648,16 @@
                                     </div>
                                     <p class="text-[9px] text-slate-500 mt-1">e.g. 2×2 → 4 separate zips, one per quadrant.</p>
                                 </div>
+                                <div>
+                                    <label class="flex items-center justify-between text-[10px] cursor-pointer">
+                                        <span class="flex items-center gap-2">
+                                            <input type="checkbox" id="manualSplitToggle" class="w-4 h-4 bg-slate-700 border-none rounded text-pink-500 focus:ring-0">
+                                            <span class="text-pink-300 uppercase font-bold tracking-wider">Manual Split Point</span>
+                                        </span>
+                                        <button id="clearSplitBtn" type="button" class="hidden text-[9px] text-slate-500 hover:text-rose-300 px-2 py-0.5 rounded border border-slate-700 hover:border-rose-500/40">Clear</button>
+                                    </label>
+                                    <p class="text-[9px] text-slate-500 mt-1">2×2 only. Click anywhere on the preview canvas to set the divider crosshair.</p>
+                                </div>
                             </div>
 
                             <!-- CorridorKey Roundtrip (personal workflow) -->
@@ -645,15 +666,25 @@
                                     <label class="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">CorridorKey Roundtrip</label>
                                     <span id="ckStatus" class="text-[9px] font-mono text-slate-500">no processed sheet</span>
                                 </div>
-                                <button id="ckExportRawBtn" type="button"
-                                    class="w-full py-2 text-[10px] font-bold uppercase tracking-wider bg-emerald-900/40 hover:bg-emerald-700/50 border border-emerald-500/30 rounded-lg text-emerald-200 transition-colors">
-                                    1. Export Raw Sheet (trim range, no chroma)
+                                <button id="ckAutoBtn" type="button"
+                                    class="w-full py-2.5 text-[11px] font-black uppercase tracking-widest bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 border border-emerald-400/40 rounded-lg text-white shadow-[0_0_15px_rgba(16,185,129,0.25)] transition-all">
+                                    ⚡ Auto: Export → CorridorKey → Reload
                                 </button>
-                                <label for="ckLoadInput"
-                                    class="block w-full py-2 text-center text-[10px] font-bold uppercase tracking-wider bg-emerald-900/40 hover:bg-emerald-700/50 border border-emerald-500/30 rounded-lg text-emerald-200 transition-colors cursor-pointer">
-                                    2. Load Processed Sheet
-                                </label>
-                                <input type="file" id="ckLoadInput" accept="image/png" class="hidden">
+                                <p class="text-[9px] text-slate-500 -mt-1">Requires queue-locked CK server at http://127.0.0.1:8766.</p>
+                                <details class="mt-1">
+                                    <summary class="text-[9px] text-slate-500 cursor-pointer hover:text-slate-300">Manual roundtrip</summary>
+                                    <div class="space-y-2 pt-2">
+                                        <button id="ckExportRawBtn" type="button"
+                                            class="w-full py-2 text-[10px] font-bold uppercase tracking-wider bg-emerald-900/40 hover:bg-emerald-700/50 border border-emerald-500/30 rounded-lg text-emerald-200 transition-colors">
+                                            1. Export Raw Sheet
+                                        </button>
+                                        <label for="ckLoadInput"
+                                            class="block w-full py-2 text-center text-[10px] font-bold uppercase tracking-wider bg-emerald-900/40 hover:bg-emerald-700/50 border border-emerald-500/30 rounded-lg text-emerald-200 transition-colors cursor-pointer">
+                                            2. Load Processed Sheet
+                                        </label>
+                                        <input type="file" id="ckLoadInput" accept="image/png" class="hidden">
+                                    </div>
+                                </details>
                                 <button id="ckClearBtn" type="button"
                                     class="hidden w-full py-1.5 text-[9px] font-bold uppercase tracking-wider bg-slate-800 hover:bg-rose-900/40 border border-slate-700 hover:border-rose-500/40 rounded-lg text-slate-400 hover:text-rose-300 transition-colors">
                                     Clear processed frames (use original video)
@@ -856,16 +887,21 @@
         let batchFiles = [];
         let fileSettings = []; // Stores settings object for each file index
         let currentFileIndex = -1;
-        let keyColor = { r: 0, g: 255, b: 0 };
+        let keyColor = null; // null = no eyedropper pick yet (chroma disabled until user clicks)
         let isExporting = false;
         let isPreviewLoopRunning = false;
         let trimStart = 0;
         let trimEnd = 1;
+        // Sticky trim values restored from localStorage at startup, applied to new
+        // videos that don't have per-file overrides. Clamped against video duration.
+        let stickyTrimStart = null;
+        let stickyTrimEnd = null;
 
         // FFmpeg Variables
         let ffmpeg = null;
         let isFFmpegLoading = false;
-        let movFrames = {}; // Cache for decoded .mov frames: { fileIndex: [ImageData, ...] }
+        let movFrames = {}; // Cache for decoded .mov frames OR CorridorKey-processed sheets: { fileIndex: [ImageData, ...] }
+        const ckProcessedFiles = new Set(); // file indices whose movFrames came from CorridorKey (skip chroma)
 
         const threads = navigator.hardwareConcurrency || 4;
         const workerBlob = new Blob([document.getElementById('workerScript').textContent], { type: 'text/javascript' });
@@ -906,10 +942,26 @@
             }
             panel.classList.remove('hidden');
             label.innerText = `${cols}×${rows} (${cols * rows} zips)`;
-            grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+            // Use the manual split fractions (2x2 only) so cell previews match real sizes
+            if (manualSplit && cols === 2 && rows === 2) {
+                grid.style.gridTemplateColumns = `${manualSplit.x}fr ${1 - manualSplit.x}fr`;
+                grid.style.gridTemplateRows = `${manualSplit.y}fr ${1 - manualSplit.y}fr`;
+            } else {
+                grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
+                grid.style.gridTemplateRows = '';
+            }
             grid.innerHTML = '';
+            // Slider-driven page number: 1..5 -> start = 1, 5, 9, 13, 17
+            const offsetSlider = document.getElementById('cellNumOffset');
+            const offsetPage = Math.max(1, Math.min(5, parseInt(offsetSlider.value) || 1));
+            const startNum = (offsetPage - 1) * 4 + 1;
+
             for (let r = 0; r < rows; r++) {
                 for (let c = 0; c < cols; c++) {
+                    const idx = r * cols + c;
+                    const cell = document.createElement('div');
+                    cell.className = 'flex flex-col gap-1';
+
                     const wrap = document.createElement('div');
                     wrap.className = 'relative rounded-lg overflow-hidden checkerboard border border-slate-700';
                     const cv = document.createElement('canvas');
@@ -920,12 +972,440 @@
                     tag.className = 'absolute top-1 left-1 bg-black/70 text-pink-300 text-[9px] font-mono px-1.5 py-0.5 rounded border border-pink-500/30';
                     tag.innerText = `r${r}c${c}`;
                     wrap.appendChild(tag);
-                    grid.appendChild(wrap);
+                    cell.appendChild(wrap);
+
+                    const name = document.createElement('input');
+                    name.type = 'text';
+                    name.dataset.r = r; name.dataset.c = c;
+                    name.className = 'cell-name w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-[10px] font-mono text-pink-200 placeholder-slate-600 focus:outline-none focus:border-pink-500 transition-colors';
+                    name.placeholder = `r${r}c${c} (zip name)`;
+                    name.title = `Zip name suffix for cell r${r}c${c}. Edit freely; slider above bulk-renumbers.`;
+                    name.value = String(startNum + idx);
+                    cell.appendChild(name);
+
+                    grid.appendChild(cell);
                 }
             }
+            updateCellNumRangeLabel();
+        }
+
+        // Re-fill all current cell-name inputs based on the offset slider.
+        function applyCellNumbering() {
+            const grid = document.getElementById('gridPreviewGrid');
+            const offsetSlider = document.getElementById('cellNumOffset');
+            if (!grid || !offsetSlider) return;
+            const offsetPage = Math.max(1, Math.min(5, parseInt(offsetSlider.value) || 1));
+            const startNum = (offsetPage - 1) * 4 + 1;
+            const cols = Math.max(1, Math.min(16, parseInt(gridColsInput.value) || 1));
+            grid.querySelectorAll('input.cell-name').forEach(inp => {
+                const r = parseInt(inp.dataset.r), c = parseInt(inp.dataset.c);
+                const idx = r * cols + c;
+                inp.value = String(startNum + idx);
+            });
+            updateCellNumRangeLabel();
+        }
+
+        function updateCellNumRangeLabel() {
+            const label = document.getElementById('cellNumRange');
+            const offsetSlider = document.getElementById('cellNumOffset');
+            if (!label || !offsetSlider) return;
+            const cols = Math.max(1, parseInt(gridColsInput.value) || 1);
+            const rows = Math.max(1, parseInt(gridRowsInput.value) || 1);
+            const total = cols * rows;
+            const offsetPage = Math.max(1, Math.min(5, parseInt(offsetSlider.value) || 1));
+            const startNum = (offsetPage - 1) * 4 + 1;
+            label.innerText = total > 1 ? `_${startNum} - _${startNum + total - 1}` : `_${startNum}`;
+        }
+
+        document.getElementById('cellNumOffset').addEventListener('input', applyCellNumbering);
+
+        // Human-friendly suffix describing how aggressively frames were skipped.
+        // skip=0 -> stride 1 -> "Full Frames"; skip=1 -> stride 2 -> "Half Frames"; etc.
+        function skipFramesLabel(skip) {
+            const s = Math.max(0, parseInt(skip) || 0);
+            const stride = s + 1;
+            const named = {
+                1: '_Full_Frames',
+                2: '_Half_Frames',
+                3: '_One_Third_Frames',
+                4: '_One_Fourth_Frames',
+                5: '_One_Fifth_Frames',
+                6: '_One_Sixth_Frames',
+                7: '_One_Seventh_Frames',
+                8: '_One_Eighth_Frames',
+                9: '_One_Ninth_Frames',
+                10: '_One_Tenth_Frames',
+            };
+            return named[stride] || `_One_${stride}th_Frames`;
+        }
+
+        // Live-preview cell rect helper (mirrors computeCellRectExport but in preview scope)
+        function computeCellRect(cc, rr, gCols, gRows, totalW, totalH) {
+            if (manualSplit && gCols === 2 && gRows === 2) {
+                const sx = Math.max(1, Math.floor(totalW * manualSplit.x));
+                const sy = Math.max(1, Math.floor(totalH * manualSplit.y));
+                const x = cc === 0 ? 0 : sx;
+                const y = rr === 0 ? 0 : sy;
+                const cw = cc === 0 ? sx : (totalW - sx);
+                const ch = rr === 0 ? sy : (totalH - sy);
+                return { x, y, cw, ch };
+            }
+            const cw = Math.max(1, Math.floor(totalW / gCols));
+            const ch = Math.max(1, Math.floor(totalH / gRows));
+            return { x: cc * cw, y: rr * ch, cw, ch };
+        }
+
+        // ---------------------------------------------------------------
+        // Manual Grid Split Point (2x2 only)
+        // ---------------------------------------------------------------
+        let manualSplit = null; // { x: 0..1, y: 0..1 } | null
+        const manualSplitToggle = document.getElementById('manualSplitToggle');
+        const clearSplitBtn = document.getElementById('clearSplitBtn');
+        const splitOverlay = document.getElementById('splitOverlay');
+
+        function isManualSplitEligible() {
+            const c = parseInt(gridColsInput.value) || 1;
+            const r = parseInt(gridRowsInput.value) || 1;
+            return c === 2 && r === 2;
+        }
+
+        function renderSplitOverlay(hoverX, hoverY) {
+            // Build inner HTML: persistent solid crosshair (if manualSplit set)
+            // + dotted cursor preview lines (if hoverX/hoverY supplied)
+            if (!splitOverlay) return;
+            let html = '';
+            const eligible = isManualSplitEligible();
+
+            if (manualSplit && eligible) {
+                const xp = (manualSplit.x * 100).toFixed(3);
+                const yp = (manualSplit.y * 100).toFixed(3);
+                html += `<div style="position:absolute;left:${xp}%;top:0;bottom:0;width:2px;background:rgba(236,72,153,0.95);box-shadow:0 0 8px rgba(236,72,153,0.7);"></div>`;
+                html += `<div style="position:absolute;top:${yp}%;left:0;right:0;height:2px;background:rgba(236,72,153,0.95);box-shadow:0 0 8px rgba(236,72,153,0.7);"></div>`;
+                html += `<div style="position:absolute;left:${xp}%;top:${yp}%;width:10px;height:10px;border:2px solid #f0abfc;border-radius:50%;transform:translate(-50%,-50%);background:rgba(236,72,153,0.5);"></div>`;
+            }
+
+            if (manualSplitToggle.checked && eligible && hoverX != null && hoverY != null) {
+                const xp = (hoverX * 100).toFixed(3);
+                const yp = (hoverY * 100).toFixed(3);
+                // Four dotted segments from cursor to each edge
+                const lineColor = 'rgba(236,72,153,0.85)';
+                const dashStyle = `border-color:${lineColor};border-style:dashed;`;
+                // up
+                html += `<div style="position:absolute;left:${xp}%;top:0;height:${yp}%;border-left:1px dashed ${lineColor};"></div>`;
+                // down
+                html += `<div style="position:absolute;left:${xp}%;top:${yp}%;bottom:0;border-left:1px dashed ${lineColor};"></div>`;
+                // left
+                html += `<div style="position:absolute;top:${yp}%;left:0;width:${xp}%;border-top:1px dashed ${lineColor};"></div>`;
+                // right
+                html += `<div style="position:absolute;top:${yp}%;left:${xp}%;right:0;border-top:1px dashed ${lineColor};"></div>`;
+                // crosshair dot at cursor
+                html += `<div style="position:absolute;left:${xp}%;top:${yp}%;width:8px;height:8px;border:1px solid #f0abfc;border-radius:50%;transform:translate(-50%,-50%);"></div>`;
+            }
+            splitOverlay.innerHTML = html;
+        }
+
+        manualSplitToggle.addEventListener('change', () => {
+            if (manualSplitToggle.checked && !isManualSplitEligible()) {
+                alert('Manual split point only applies to a 2×2 grid. Set Cols=2 and Rows=2 first.');
+                manualSplitToggle.checked = false;
+                return;
+            }
+            mainCanvas.style.cursor = manualSplitToggle.checked ? 'crosshair' : 'crosshair';
+            renderSplitOverlay();
+        });
+
+        clearSplitBtn.addEventListener('click', () => {
+            manualSplit = null;
+            renderSplitOverlay();
+            if (typeof rebuildGridPreview === 'function') rebuildGridPreview();
+            updateClearSplitVis();
+            saveState();
+        });
+
+        function updateClearSplitVis() {
+            clearSplitBtn.classList.toggle('hidden', !manualSplit);
+        }
+
+        // Hook hover/move on the main canvas wrapper for the dotted preview
+        mainCanvas.addEventListener('mousemove', (e) => {
+            if (!manualSplitToggle.checked || !isManualSplitEligible()) return;
+            const r = mainCanvas.getBoundingClientRect();
+            const hx = (e.clientX - r.left) / r.width;
+            const hy = (e.clientY - r.top) / r.height;
+            renderSplitOverlay(hx, hy);
+        });
+        mainCanvas.addEventListener('mouseleave', () => {
+            if (manualSplitToggle.checked) renderSplitOverlay();
+        });
+
+        // Re-render overlay when grid dims change (eligibility or scaling)
+        gridColsInput.addEventListener('input', () => renderSplitOverlay());
+        gridRowsInput.addEventListener('input', () => renderSplitOverlay());
+
+        // Lookup helper: get the user-supplied name for a grid cell, or empty string.
+        function getCellNameOverride(r, c) {
+            const inp = document.querySelector(`#gridPreviewGrid input.cell-name[data-r="${r}"][data-c="${c}"]`);
+            const v = inp ? inp.value.trim() : '';
+            return v.replace(/[^A-Za-z0-9_\-]/g, '_');
         }
         gridColsInput.addEventListener('input', rebuildGridPreview);
         gridRowsInput.addEventListener('input', rebuildGridPreview);
+
+        function clearKeyColor() {
+            keyColor = null;
+            const sw = document.getElementById('colorSwatch');
+            const hx = document.getElementById('hexDisplay');
+            if (sw) sw.style.backgroundColor = 'transparent';
+            if (hx) {
+                hx.innerText = 'no key picked';
+                hx.className = 'flex-1 text-xs font-mono text-slate-500';
+            }
+        }
+        document.getElementById('clearKeyBtn').addEventListener('click', clearKeyColor);
+
+        // ---------------------------------------------------------------
+        // CorridorKey Roundtrip
+        // 1) Export raw spritesheet of trim range (no chroma) for CK input
+        // 2) Load CK's processed sheet back -> populate movFrames so the
+        //    existing preview/export pipeline uses those frames as source.
+        // ---------------------------------------------------------------
+        const CK_FPS = 24;
+        const ckStatus = document.getElementById('ckStatus');
+        const ckExportRawBtn = document.getElementById('ckExportRawBtn');
+        const ckLoadInput = document.getElementById('ckLoadInput');
+        const ckClearBtn = document.getElementById('ckClearBtn');
+
+        function ckUpdateStatus() {
+            const has = !!movFrames[currentFileIndex];
+            if (has) {
+                const n = movFrames[currentFileIndex].length;
+                ckStatus.innerText = `processed sheet active (${n} frames)`;
+                ckStatus.className = 'text-[9px] font-mono text-emerald-300';
+                ckClearBtn.classList.remove('hidden');
+            } else {
+                ckStatus.innerText = 'no processed sheet';
+                ckStatus.className = 'text-[9px] font-mono text-slate-500';
+                ckClearBtn.classList.add('hidden');
+            }
+        }
+
+        // Build a raw spritesheet of the current trim range. Returns { blob, meta }.
+        async function ckBuildRawSheet() {
+            const settings = getSettingsFromUI();
+            const startT = settings.trimStart;
+            const endT = settings.trimEnd > settings.trimStart ? settings.trimEnd : sourceVideo.duration;
+            const skip = Math.max(0, parseInt(settings.skipFrames) || 0);
+            const stride = skip + 1;
+            const activeDuration = endT - startT;
+            const rawCount = Math.floor(activeDuration * CK_FPS);
+            const totalFrames = Math.max(1, Math.floor(rawCount / stride));
+
+            const fW = sourceVideo.videoWidth, fH = sourceVideo.videoHeight;
+            const cols = Math.ceil(Math.sqrt(totalFrames));
+            const rows = Math.ceil(totalFrames / cols);
+
+            const sheet = document.createElement('canvas');
+            sheet.width = cols * fW;
+            sheet.height = rows * fH;
+            const sCtx = sheet.getContext('2d');
+
+            // If movFrames is already populated (.mov decoded or prior CK roundtrip), use it
+            const existing = movFrames[currentFileIndex];
+
+            for (let f = 0; f < totalFrames; f++) {
+                const captureIdx = settings.reverse ? (totalFrames - 1 - f) : f;
+                const sx = (f % cols) * fW;
+                const sy = Math.floor(f / cols) * fH;
+
+                if (existing) {
+                    const idx = Math.min(existing.length - 1, Math.max(0, Math.floor((captureIdx / totalFrames) * existing.length)));
+                    const tmp = document.createElement('canvas');
+                    tmp.width = existing[idx].width; tmp.height = existing[idx].height;
+                    tmp.getContext('2d').putImageData(existing[idx], 0, 0);
+                    sCtx.drawImage(tmp, sx, sy, fW, fH);
+                } else {
+                    sourceVideo.currentTime = startT + (captureIdx * stride / CK_FPS);
+                    await new Promise(r => { const os = () => { sourceVideo.removeEventListener('seeked', os); r(); }; sourceVideo.addEventListener('seeked', os); });
+                    sCtx.drawImage(sourceVideo, sx, sy, fW, fH);
+                }
+                const pct = Math.round(((f + 1) / totalFrames) * 100);
+                document.getElementById('procBar').style.width = pct + '%';
+                document.getElementById('procText').innerText = pct + '%';
+                document.getElementById('statusDetail').innerText = `Frame ${f + 1}/${totalFrames}`;
+            }
+
+            const baseName = (settings.exportName || batchFiles[currentFileIndex].name.split('.')[0]).replace(/[^A-Za-z0-9_\-]/g, '_');
+            const blob = await new Promise(r => sheet.toBlob(r, 'image/png'));
+            return {
+                blob,
+                meta: { cols, rows, frameW: fW, frameH: fH, count: totalFrames, baseName }
+            };
+        }
+
+        // Slice a transparent sheet PNG blob into ImageData frames using meta, populate
+        // movFrames + ckProcessedFiles, refresh canvas + status.
+        async function ckLoadSheetBlob(blob, meta) {
+            const img = await new Promise((res, rej) => {
+                const im = new Image();
+                im.onload = () => res(im);
+                im.onerror = rej;
+                im.src = URL.createObjectURL(blob);
+            });
+            const tmp = document.createElement('canvas');
+            tmp.width = img.width; tmp.height = img.height;
+            tmp.getContext('2d').drawImage(img, 0, 0);
+            URL.revokeObjectURL(img.src);
+
+            const cellCanvas = document.createElement('canvas');
+            cellCanvas.width = meta.frameW; cellCanvas.height = meta.frameH;
+            const cctx = cellCanvas.getContext('2d');
+            const frames = [];
+            for (let i = 0; i < meta.count; i++) {
+                const sx = (i % meta.cols) * meta.frameW;
+                const sy = Math.floor(i / meta.cols) * meta.frameH;
+                cctx.clearRect(0, 0, meta.frameW, meta.frameH);
+                cctx.drawImage(tmp, sx, sy, meta.frameW, meta.frameH, 0, 0, meta.frameW, meta.frameH);
+                frames.push(cctx.getImageData(0, 0, meta.frameW, meta.frameH));
+            }
+
+            movFrames[currentFileIndex] = frames;
+            ckProcessedFiles.add(currentFileIndex);
+            mainCanvas.width = meta.frameW;
+            mainCanvas.height = meta.frameH;
+            sourceVideo.currentTime = trimStart;
+            ckUpdateStatus();
+        }
+
+        ckExportRawBtn.addEventListener('click', async () => {
+            if (currentFileIndex < 0 || !batchFiles[currentFileIndex]) { alert('Load a video first.'); return; }
+            if (isExporting) return;
+            isExporting = true;
+            sourceVideo.pause();
+            document.getElementById('statusModal').classList.remove('hidden');
+            document.getElementById('statusTitle').innerText = 'Building Raw Sheet';
+            document.getElementById('passTypeLabel').innerText = 'Capturing Frames';
+            document.getElementById('currentFileName').innerText = batchFiles[currentFileIndex].name;
+            try {
+                const { blob, meta } = await ckBuildRawSheet();
+                const fname = `${meta.baseName}__CKraw__cols${meta.cols}_rows${meta.rows}_w${meta.frameW}_h${meta.frameH}_n${meta.count}.png`;
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = fname;
+                a.click();
+            } catch (e) {
+                console.error(e);
+                alert('Raw sheet export failed: ' + e.message);
+            } finally {
+                document.getElementById('statusModal').classList.add('hidden');
+                isExporting = false;
+                if (!isPreviewLoopRunning) { isPreviewLoopRunning = true; requestAnimationFrame(previewLoop); }
+            }
+        });
+
+        // Auto button: build raw sheet -> POST to PHP proxy -> proxy runs queue-locked
+        // CorridorKey -> proxy returns transparent sheet -> load it back into the engine.
+        const ckAutoBtn = document.getElementById('ckAutoBtn');
+        ckAutoBtn.addEventListener('click', async () => {
+            if (currentFileIndex < 0 || !batchFiles[currentFileIndex]) { alert('Load a video first.'); return; }
+            if (isExporting) return;
+            isExporting = true;
+            sourceVideo.pause();
+            document.getElementById('statusModal').classList.remove('hidden');
+            document.getElementById('statusTitle').innerText = 'Building Raw Sheet';
+            document.getElementById('passTypeLabel').innerText = 'Capturing Frames';
+            document.getElementById('currentFileName').innerText = batchFiles[currentFileIndex].name;
+            try {
+                const { blob, meta } = await ckBuildRawSheet();
+
+                document.getElementById('statusTitle').innerText = 'Running CorridorKey';
+                document.getElementById('passTypeLabel').innerText = 'Server processing (queue-locked)';
+                document.getElementById('statusDetail').innerText = 'Uploading sheet to proxy...';
+                document.getElementById('procBar').style.width = '0%';
+                document.getElementById('procText').innerText = '...';
+
+                const fd = new FormData();
+                fd.append('sheet', blob, 'sheet.png');
+                fd.append('cols', String(meta.cols));
+                fd.append('rows', String(meta.rows));
+                fd.append('frameW', String(meta.frameW));
+                fd.append('frameH', String(meta.frameH));
+                fd.append('count', String(meta.count));
+                fd.append('baseName', meta.baseName);
+
+                const resp = await fetch('corridorkey_proxy.php', { method: 'POST', body: fd });
+                if (!resp.ok) {
+                    const text = await resp.text();
+                    throw new Error(`Proxy ${resp.status}: ${text}`);
+                }
+                document.getElementById('statusDetail').innerText = 'Loading processed sheet...';
+                const outBlob = await resp.blob();
+                await ckLoadSheetBlob(outBlob, meta);
+            } catch (e) {
+                console.error(e);
+                alert('CorridorKey auto-run failed: ' + e.message);
+            } finally {
+                document.getElementById('statusModal').classList.add('hidden');
+                isExporting = false;
+                if (!isPreviewLoopRunning) { isPreviewLoopRunning = true; requestAnimationFrame(previewLoop); }
+            }
+        });
+
+        ckLoadInput.addEventListener('change', async (e) => {
+            const file = e.target.files && e.target.files[0];
+            e.target.value = ''; // reset so same file can be loaded again
+            if (!file) return;
+            if (currentFileIndex < 0) { alert('Load a video first.'); return; }
+
+            // Parse layout from filename: __CKraw__cols<C>_rows<R>_w<W>_h<H>_n<N>
+            const m = file.name.match(/cols(\d+)_rows(\d+)_w(\d+)_h(\d+)_n(\d+)/);
+            if (!m) { alert('Filename must contain CKraw layout metadata, e.g. ...cols5_rows5_w1920_h1080_n23.png'); return; }
+            const cols = parseInt(m[1]), rows = parseInt(m[2]);
+            const frameW = parseInt(m[3]), frameH = parseInt(m[4]), total = parseInt(m[5]);
+
+            const img = await new Promise((res, rej) => {
+                const im = new Image();
+                im.onload = () => res(im);
+                im.onerror = rej;
+                im.src = URL.createObjectURL(file);
+            });
+
+            const tmp = document.createElement('canvas');
+            tmp.width = img.width; tmp.height = img.height;
+            tmp.getContext('2d').drawImage(img, 0, 0);
+            URL.revokeObjectURL(img.src);
+
+            const cellCanvas = document.createElement('canvas');
+            cellCanvas.width = frameW; cellCanvas.height = frameH;
+            const cctx = cellCanvas.getContext('2d');
+            const frames = [];
+            for (let i = 0; i < total; i++) {
+                const sx = (i % cols) * frameW;
+                const sy = Math.floor(i / cols) * frameH;
+                cctx.clearRect(0, 0, frameW, frameH);
+                cctx.drawImage(tmp, sx, sy, frameW, frameH, 0, 0, frameW, frameH);
+                frames.push(cctx.getImageData(0, 0, frameW, frameH));
+            }
+
+            movFrames[currentFileIndex] = frames;
+            ckProcessedFiles.add(currentFileIndex);
+            // Adapt main canvas dims so previewLoop renders correctly
+            mainCanvas.width = frameW;
+            mainCanvas.height = frameH;
+            sourceVideo.currentTime = trimStart; // refresh
+            ckUpdateStatus();
+        });
+
+        ckClearBtn.addEventListener('click', () => {
+            if (currentFileIndex >= 0) {
+                delete movFrames[currentFileIndex];
+                ckProcessedFiles.delete(currentFileIndex);
+                if (sourceVideo.videoWidth) {
+                    mainCanvas.width = sourceVideo.videoWidth;
+                    mainCanvas.height = sourceVideo.videoHeight;
+                }
+                ckUpdateStatus();
+            }
+        });
 
         // Trim UI References
         const handleStart = document.getElementById('handleStart');
@@ -1088,7 +1568,7 @@
             return {
                 trimStart,
                 trimEnd,
-                keyColor: { ...keyColor },
+                keyColor: keyColor ? { ...keyColor } : null,
                 tolerance: parseInt(ranges.tolerance.value),
                 choke: parseInt(ranges.choke.value),
                 speed: parseFloat(speedInput.value) || 1.0,
@@ -1133,9 +1613,12 @@
                 document.getElementById('resAll').checked = all.length === checked.length;
             }
 
-            if (s.hexInfo) {
+            if (s.keyColor && s.hexInfo) {
                 document.getElementById('hexDisplay').innerText = s.hexInfo.hex;
+                document.getElementById('hexDisplay').className = 'flex-1 text-xs font-mono text-blue-300';
                 document.getElementById('colorSwatch').style.backgroundColor = s.hexInfo.swatch;
+            } else {
+                clearKeyColor();
             }
             updateTrimUI();
         }
@@ -1265,19 +1748,25 @@
                 mainCanvas.width = sourceVideo.videoWidth;
                 mainCanvas.height = sourceVideo.videoHeight;
 
-                // For .mov files, we use the decoded frames' dimensions
-                if (isMov && movFrames[index] && movFrames[index].length > 0) {
+                // If we have cached frames (decoded .mov OR CorridorKey processed sheet), use their dims
+                if (movFrames[index] && movFrames[index].length > 0) {
                     mainCanvas.width = movFrames[index][0].width;
                     mainCanvas.height = movFrames[index][0].height;
                 }
+                if (typeof ckUpdateStatus === 'function') ckUpdateStatus();
 
-                // Load existing settings OR Default (inherit sticky UI but reset Trim)
+                // Load existing settings OR Default (inherit sticky UI; trim from sticky-localStorage when set)
                 if (fileSettings[index]) {
                     applySettingsToUI(fileSettings[index]);
                 } else {
-                    // Reset trims for new video, keep other UI settings "Sticky"
-                    trimStart = 0;
-                    trimEnd = sourceVideo.duration;
+                    const dur = sourceVideo.duration || 1;
+                    if (stickyTrimStart !== null && stickyTrimEnd !== null && stickyTrimEnd > stickyTrimStart) {
+                        trimStart = Math.max(0, Math.min(stickyTrimStart, dur));
+                        trimEnd   = Math.max(trimStart + 0.01, Math.min(stickyTrimEnd, dur));
+                    } else {
+                        trimStart = 0;
+                        trimEnd = dur;
+                    }
                     updateTrimUI();
                 }
 
@@ -1392,9 +1881,12 @@
             const w = mainCanvas.width, h = mainCanvas.height;
             if (w === 0 || h === 0) { requestAnimationFrame(previewLoop); return; }
             const frame = ctx.getImageData(0, 0, w, h);
-            const kr = keyColor.r, kg = keyColor.g, kb = keyColor.b;
-            const tol = parseInt(ranges.tolerance.value);
-            const chokeAmount = parseInt(ranges.choke.value);
+            const ckActive = ckProcessedFiles.has(currentFileIndex);
+            const noKey = !keyColor;
+            const kr = keyColor ? keyColor.r : 0, kg = keyColor ? keyColor.g : 0, kb = keyColor ? keyColor.b : 0;
+            // CK output already has clean alpha; or no key picked -> tolerance 0 disables chroma.
+            const tol = (ckActive || noKey) ? 0 : parseInt(ranges.tolerance.value);
+            const chokeAmount = (ckActive || noKey) ? 0 : parseInt(ranges.choke.value);
             const d = frame.data;
 
             let minX = w, minY = h, maxX = 0, maxY = 0, hasVisible = false;
@@ -1440,8 +1932,6 @@
             const gCols = Math.max(1, parseInt(gridColsInput.value) || 1);
             const gRows = Math.max(1, parseInt(gridRowsInput.value) || 1);
             if (gCols > 1 || gRows > 1) {
-                const cellW = Math.max(1, Math.floor(w / gCols));
-                const cellH = Math.max(1, Math.floor(h / gRows));
                 const expectedCells = gCols * gRows;
                 const cells = document.querySelectorAll('#gridPreviewGrid canvas');
                 if (cells.length !== expectedCells) {
@@ -1449,12 +1939,13 @@
                 } else {
                     cells.forEach(cv => {
                         const rr = parseInt(cv.dataset.r), cc = parseInt(cv.dataset.c);
-                        if (cv.width !== cellW || cv.height !== cellH) {
-                            cv.width = cellW; cv.height = cellH;
+                        const rect = computeCellRect(cc, rr, gCols, gRows, w, h);
+                        if (cv.width !== rect.cw || cv.height !== rect.ch) {
+                            cv.width = rect.cw; cv.height = rect.ch;
                         }
                         const cctx = cv.getContext('2d');
-                        cctx.clearRect(0, 0, cellW, cellH);
-                        cctx.drawImage(mainCanvas, cc * cellW, rr * cellH, cellW, cellH, 0, 0, cellW, cellH);
+                        cctx.clearRect(0, 0, rect.cw, rect.ch);
+                        cctx.drawImage(mainCanvas, rect.x, rect.y, rect.cw, rect.ch, 0, 0, rect.cw, rect.ch);
                     });
                 }
             }
@@ -1500,6 +1991,9 @@
                 skipFrames: Math.max(0, parseInt(skipFramesInput.value) || 0),
                 gridCols: Math.max(1, parseInt(gridColsInput.value) || 1),
                 gridRows: Math.max(1, parseInt(gridRowsInput.value) || 1),
+                trimStart: trimStart,
+                trimEnd: trimEnd,
+                manualSplit: manualSplit,
                 exportName: exportNameInput.value,
                 resolutions: selectedRes,
                 formats: selectedFmt,
@@ -1528,6 +2022,13 @@
                     if (s.skipFrames !== undefined) skipFramesInput.value = s.skipFrames;
                     if (s.gridCols !== undefined) gridColsInput.value = s.gridCols;
                     if (s.gridRows !== undefined) gridRowsInput.value = s.gridRows;
+                    if (typeof s.trimStart === 'number') stickyTrimStart = s.trimStart;
+                    if (typeof s.trimEnd === 'number') stickyTrimEnd = s.trimEnd;
+                    if (s.manualSplit && typeof s.manualSplit.x === 'number' && typeof s.manualSplit.y === 'number') {
+                        manualSplit = { x: s.manualSplit.x, y: s.manualSplit.y };
+                        if (typeof updateClearSplitVis === 'function') updateClearSplitVis();
+                        if (typeof renderSplitOverlay === 'function') renderSplitOverlay();
+                    }
 
                     if (s.formats) {
                         document.getElementById('fmtSheet').checked = s.formats.includes('sheet');
@@ -1568,11 +2069,8 @@
 
                     if (s.comment) commentBox.value = s.comment;
                     if (s.exportName !== undefined) exportNameInput.value = s.exportName;
-                    if (s.color) {
-                        keyColor = s.color.keyColor;
-                        document.getElementById('hexDisplay').innerText = s.color.hex;
-                        document.getElementById('colorSwatch').style.backgroundColor = s.color.swatch;
-                    }
+                    // Eyedropper / key color is intentionally NOT restored across sessions.
+                    // Each session starts fresh — see clearKeyColor() default below.
                 } catch (e) { console.error("State load failed", e); }
             }
         }
@@ -1628,15 +2126,18 @@
             pausePreview();
             sourceVideo.currentTime = time;
             updateTrimUI();
+            stickyTrimStart = trimStart; stickyTrimEnd = trimEnd; saveState();
         }
 
         startTimeInput.addEventListener('change', (e) => {
             trimStart = parseFloat(e.target.value) || 0;
             pausePreview(); sourceVideo.currentTime = trimStart; updateTrimUI();
+            stickyTrimStart = trimStart; stickyTrimEnd = trimEnd; saveState();
         });
         endTimeInput.addEventListener('change', (e) => {
             trimEnd = parseFloat(e.target.value) || sourceVideo.duration;
             pausePreview(); sourceVideo.currentTime = trimEnd; updateTrimUI();
+            stickyTrimStart = trimStart; stickyTrimEnd = trimEnd; saveState();
         });
 
         window.addEventListener('mouseup', () => activeHandle = null);
@@ -1648,6 +2149,20 @@
         mainCanvas.addEventListener('mousedown', e => {
             const r = mainCanvas.getBoundingClientRect();
             const x = (e.clientX - r.left) * (mainCanvas.width / r.width), y = (e.clientY - r.top) * (mainCanvas.height / r.height);
+
+            // Manual split point mode takes precedence
+            if (manualSplitToggle.checked && isManualSplitEligible()) {
+                manualSplit = {
+                    x: Math.max(0.01, Math.min(0.99, x / mainCanvas.width)),
+                    y: Math.max(0.01, Math.min(0.99, y / mainCanvas.height))
+                };
+                renderSplitOverlay(manualSplit.x, manualSplit.y);
+                updateClearSplitVis();
+                if (typeof rebuildGridPreview === 'function') rebuildGridPreview();
+                saveState();
+                return;
+            }
+
             const p = ctx.getImageData(x, y, 1, 1).data;
             const hex = `#${((1 << 24) + (p[0] << 16) + (p[1] << 8) + p[2]).toString(16).slice(1).toUpperCase()}`;
 
@@ -1661,7 +2176,9 @@
 
             keyColor = { r: p[0], g: p[1], b: p[2] };
             document.getElementById('colorSwatch').style.backgroundColor = `rgb(${p[0]},${p[1]},${p[2]})`;
-            document.getElementById('hexDisplay').innerText = hex;
+            const hx = document.getElementById('hexDisplay');
+            hx.innerText = hex;
+            hx.className = 'flex-1 text-xs font-mono text-blue-300';
         });
 
         // GIF UI Hooks
@@ -1745,6 +2262,22 @@
             const gridCols = Math.max(1, Math.min(16, parseInt(gridColsInput.value) || 1));
             const gridRows = Math.max(1, Math.min(16, parseInt(gridRowsInput.value) || 1));
             const gridEnabled = (gridCols > 1 || gridRows > 1);
+            // Resolve a cell rect (x, y, cw, ch) honoring manualSplit for 2x2.
+            // Defined here in scope of the export run so it sees gridCols/gridRows/manualSplit.
+            const computeCellRectExport = (cc, rr, totalW, totalH) => {
+                if (manualSplit && gridCols === 2 && gridRows === 2) {
+                    const sx = Math.max(1, Math.floor(totalW * manualSplit.x));
+                    const sy = Math.max(1, Math.floor(totalH * manualSplit.y));
+                    const x = cc === 0 ? 0 : sx;
+                    const y = rr === 0 ? 0 : sy;
+                    const cw = cc === 0 ? sx : (totalW - sx);
+                    const ch = rr === 0 ? sy : (totalH - sy);
+                    return { x, y, cw, ch };
+                }
+                const cw = Math.max(1, Math.floor(totalW / gridCols));
+                const ch = Math.max(1, Math.floor(totalH / gridRows));
+                return { x: cc * cw, y: rr * ch, cw, ch };
+            };
             const cropImageDataToCell = (src, cx, cy, cw, ch) => {
                 const a = document.createElement('canvas');
                 a.width = src.width; a.height = src.height;
@@ -1777,7 +2310,12 @@
             // Outer cell loop -- one zip per grid cell
             for (let cellRow = 0; cellRow < gridRows; cellRow++) {
             for (let cellCol = 0; cellCol < gridCols; cellCol++) {
-            const cellSuffix = gridEnabled ? `_r${cellRow}c${cellCol}` : '';
+            // Per-cell zip name: user-supplied override (text input under each grid preview)
+            // takes precedence; otherwise default to the r/c coordinate suffix.
+            const cellNameOverride = gridEnabled ? getCellNameOverride(cellRow, cellCol) : '';
+            const cellSuffix = gridEnabled
+                ? '_' + (cellNameOverride || `r${cellRow}c${cellCol}`)
+                : '';
             const zip = new JSZip();
 
             for (let i = 0; i < batchFiles.length; i++) {
@@ -1786,7 +2324,8 @@
                 // Note: getSettingsFromUI reads the DOM, so passing `getSettingsFromUI()` as default 
                 // means "if I haven't clicked it, use the settings nicely visible on screen RIGHT NOW"
                 const settings = fileSettings[i] || getSettingsFromUI();
-                const baseName = (settings.exportName || file.name.split('.')[0]) + cellSuffix;
+                const skipLabel = skipFramesLabel(settings.skipFrames);
+                const baseName = (settings.exportName || file.name.split('.')[0]) + skipLabel + cellSuffix;
                 document.getElementById('currentFileName').innerText = gridEnabled ? `${file.name} [r${cellRow}c${cellCol}]` : file.name;
                 document.getElementById('batchBar').style.width = `${(i / batchFiles.length) * 100}%`;
                 document.getElementById('batchText').innerText = `${Math.round((i / batchFiles.length) * 100)}%`;
@@ -1803,17 +2342,21 @@
                 const rawFrameCount = Math.floor(activeDuration * fps);
                 const totalFrames = Math.max(1, Math.floor(rawFrameCount / stride));
                 const fullW = sourceVideo.videoWidth, fullH = sourceVideo.videoHeight;
-                const cellW = Math.max(1, Math.floor(fullW / gridCols));
-                const cellH = Math.max(1, Math.floor(fullH / gridRows));
-                const cellX = cellCol * cellW, cellY = cellRow * cellH;
+                const _cellRect = computeCellRectExport(cellCol, cellRow, fullW, fullH);
+                const cellW = _cellRect.cw, cellH = _cellRect.ch;
+                const cellX = _cellRect.x, cellY = _cellRect.y;
                 const vW = cellW, vH = cellH;
 
+                const ckActiveForFile = ckProcessedFiles.has(i);
+                const noKeyForFile = !settings.keyColor;
+                const bypassChroma = ckActiveForFile || noKeyForFile;
                 const workerSettings = {
-                    keyColor: settings.keyColor,
-                    tolerance: settings.tolerance,
-                    smoothness: 10,
-                    chokeAmount: settings.choke,
-                    removeWatermark: settings.watermark,
+                    keyColor: settings.keyColor || { r: 0, g: 0, b: 0 },
+                    // CK already keyed OR no eyedropper pick: bypass chroma + choke + watermark
+                    tolerance: bypassChroma ? 0 : settings.tolerance,
+                    smoothness: bypassChroma ? 0 : 10,
+                    chokeAmount: bypassChroma ? 0 : settings.choke,
+                    removeWatermark: bypassChroma ? false : settings.watermark,
                     autoCrop: settings.autoFit
                 };
 
@@ -1856,7 +2399,7 @@
                         const mFrames = movFrames[i];
                         let img;
 
-                        if (isMov && mFrames) {
+                        if (mFrames) {
                             const frameIdx = Math.min(mFrames.length - 1, Math.max(0, Math.floor((captureIdx / totalFrames) * mFrames.length)));
                             const frameImg = mFrames[frameIdx];
                             img = gridEnabled ? cropImageDataToCell(frameImg, cellX, cellY, cellW, cellH) : frameImg;
@@ -2174,10 +2717,11 @@ ${userComment || "No comments."}`;
             // Naming Logic: If single file, use valid name. If batch, use generic.
             const firstSettings = fileSettings[0] || getSettingsFromUI();
             const firstBaseName = firstSettings.exportName || batchFiles[0].name.split('.')[0];
+            const firstSkipLabel = skipFramesLabel(firstSettings.skipFrames);
 
             link.download = batchFiles.length === 1
-                ? `${firstBaseName}${cellSuffix}_Export.zip`
-                : `Maxymax_Batch_Export_${Date.now()}${cellSuffix}.zip`;
+                ? `${firstBaseName}${firstSkipLabel}${cellSuffix}.zip`
+                : `Maxymax_Batch_${Date.now()}${firstSkipLabel}${cellSuffix}.zip`;
 
             link.click();
             // Slight delay between cell downloads so the browser doesn't merge or block them
@@ -2198,191 +2742,230 @@ ${userComment || "No comments."}`;
          * Separated into its own script block to keep the main export logic clean.
          */
         const buildExportPreview = (task, totalFrames, standardFPS, baseName, cellInfo) => {
+            const MAX = 768;
+            const dispScale = Math.min(1, MAX / task.w, MAX / task.h);
+            const dispW = Math.round(task.w * dispScale);
+            const dispH = Math.round(task.h * dispScale);
+            const minFps = Math.max(0.5, +(standardFPS / 4).toFixed(2));
+            const maxFps = +(Math.max(60, standardFPS * 4)).toFixed(1);
+            const fpsStep = standardFPS >= 10 ? 0.5 : 0.1;
+
             const style = `
                 :root { --accent: #38bdf8; --bg: #0f172a; --card: #1e293b; --text: #f8fafc; --dim: #94a3b8; --code-bg: #000; }
                 body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 40px 20px; }
-                .container { max-width: 900px; width: 100%; display: flex; flex-direction: column; gap: 40px; animation: fadeIn 0.8s ease-out; }
+                .container { max-width: 900px; width: 100%; display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.6s ease-out; }
                 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-                
-                .card { background: var(--card); border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); padding: 40px; display: flex; flex-direction: column; align-items: center; gap: 24px; }
-                .pill { background: var(--accent); color: #000; padding: 8px 20px; border-radius: 100px; font-size: 14px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
-                .asset-frame { background: #000; padding: 15px; border-radius: 20px; border: 6px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-                .asset { display: block; border-radius: 4px; }
-                
-                .lesson { text-align: left; background: var(--card); border-radius: 24px; padding: 40px; border: 1px solid rgba(255,255,255,0.1); }
-                h1 { margin: 0; font-size: 32px; font-weight: 800; color: #fff; }
-                h2 { font-size: 22px; color: var(--accent); margin-top: 0; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
-                p { line-height: 1.7; color: var(--dim); margin: 0 0 20px; font-size: 16px; }
-                
-                .code-box { background: var(--code-bg); border-radius: 12px; padding: 20px; margin: 15px 0; border: 1px solid #334155; position: relative; overflow-x: auto; }
-                .code-header { font-size: 12px; color: var(--accent); font-weight: 800; text-transform: uppercase; margin-bottom: 10px; opacity: 0.7; }
-                pre { margin: 0; font-family: 'Consolas', monospace; font-size: 14px; line-height: 1.5; color: #38bdf8; }
-                .comment { color: #64748b; font-style: italic; }
-                
-                .magic-step { margin-bottom: 30px; }
-                .magic-step:last-child { margin-bottom: 0; }
-                .magic-title { font-weight: 700; color: #fff; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
-                .magic-num { background: var(--accent); color: #000; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 14px; }
+                .card { background: var(--card); border-radius: 24px; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); padding: 32px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+                .pill { background: var(--accent); color: #000; padding: 6px 16px; border-radius: 100px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+                h1 { margin: 0; font-size: 24px; font-weight: 800; color: #fff; }
+                .asset-frame { background: #000; padding: 12px; border-radius: 16px; border: 5px solid #334155; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: inline-block; line-height: 0; }
+                .scaler { display: block; transform-origin: top left; }
+                #asset, #asset-canvas, #asset-img { display: block; transform-origin: center center; transition: transform 0.15s; }
+                .controls { display: flex; flex-wrap: wrap; gap: 14px 22px; align-items: center; justify-content: center; padding: 12px 18px; background: rgba(0,0,0,0.4); border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); width: 100%; max-width: 600px; box-sizing: border-box; }
+                .controls label { font-size: 12px; color: var(--dim); display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+                .controls input[type=range] { width: 180px; accent-color: var(--accent); }
+                .controls input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); cursor: pointer; }
+                #speedVal { color: var(--accent); font-weight: 700; font-family: 'Consolas', monospace; min-width: 64px; text-align: right; font-size: 12px; }
+                .lesson { background: var(--card); border-radius: 20px; padding: 24px 28px; border: 1px solid rgba(255,255,255,0.08); }
+                h2 { font-size: 16px; color: var(--accent); margin: 0 0 12px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 800; }
+                p { line-height: 1.6; color: var(--dim); margin: 0 0 14px; font-size: 13px; }
+                .code-box { background: var(--code-bg); border-radius: 10px; padding: 16px; border: 1px solid #334155; overflow-x: auto; }
+                .code-header { font-size: 10px; color: var(--accent); font-weight: 800; text-transform: uppercase; margin-bottom: 8px; opacity: 0.7; letter-spacing: 0.1em; }
+                pre { margin: 0; font-family: 'Consolas', 'Courier New', monospace; font-size: 12.5px; line-height: 1.55; color: #cbd5e1; white-space: pre; }
+                .gif-note { font-size: 11px; color: #f59e0b; font-style: italic; margin: 0; }
             `;
 
-            let previewHtml = '';
-            let lessonHtml = '';
-            let scriptCode = '';
-            const frameDelay = Math.round(1000 / standardFPS);
+            // Build the inner asset element + the runtime <script> per task type.
+            // Runtime code uses string-concatenation (no nested template literals) to keep escaping simple.
+            let assetEl = '';
+            let runtime = '';
+            const isGif = task.type === 'gif';
+            const isSheet = task.type === 'sheet';
+            const isSeq = task.type === 'seq';
 
-            if (task.type === 'sheet') {
+            if (isSheet) {
                 const sheetUrl = `${baseName}_${task.label}_sheet.png`;
-                previewHtml = `<div class="asset" id="magic-window" style="width:${task.w}px; height:${task.h}px; background: url('${sheetUrl}') no-repeat; background-size:${task.w * task.cols}px auto;"></div>`;
-
-                lessonHtml = `
-                    <div class="magic-step">
-                        <div class="magic-title"><span class="magic-num">1</span> First, make a "Window"</div>
-                        <p>We use a <code>&lt;div&gt;</code> tag. It's like a square hole in a wall where we see the art.</p>
-                        <div class="code-box">
-                            <div class="code-header">HTML</div>
-                            <pre>&lt;div id="my-window"&gt;&lt;/div&gt;</pre>
-                        </div>
-                    </div>
-                    <div class="magic-step">
-                        <div class="magic-title"><span class="magic-num">2</span> Frame the Window with CSS</div>
-                        <p>We tell the window exactly how big it should be and put our long strip of art behind it.</p>
-                        <div class="code-box">
-                            <div class="code-header">CSS</div>
-                            <pre>#my-window {
-  width: ${task.w}px;
-  height: ${task.h}px;
-  background: url('${sheetUrl}');
-}</pre>
-                        </div>
-                    </div>
-                    <div class="magic-step">
-                        <div class="magic-title"><span class="magic-num">3</span> The "Magic Timer"</div>
-                        <p>This code slides the strip of art behind the window very fast. It feels like it's moving!</p>
-                        <div class="code-box">
-                            <div class="code-header">JAVASCRIPT</div>
-                            <pre><span class="comment">// 1. How many columns are on our sheet?</span>
-const cols = ${task.cols};
-<span class="comment">// 2. Keep track of which frame to show</span>
-let frame = 0;
-<span class="comment">// 3. Change frame every ${frameDelay} milliseconds</span>
-setInterval(() => {
-  const x = (frame % cols) * ${task.w};
-  const y = Math.floor(frame / cols) * ${task.h};
-  document.getElementById('my-window').style.backgroundPosition = \`-\${x}px -\${y}px\`;
-  frame = (frame + 1) % ${totalFrames};
-}, ${frameDelay});</pre>
-                        </div>
-                    </div>
-                `;
-
-                scriptCode = `
-                    const el = document.getElementById('magic-window');
-                    let f = 0;
-                    setInterval(() => {
-                        const x = (f % ${task.cols}) * ${task.w};
-                        const y = Math.floor(f / ${task.cols}) * ${task.h};
-                        el.style.backgroundPosition = \`-\${x}px -\${y}px\`;
-                        f = (f + 1) % ${totalFrames};
-                    }, ${frameDelay});
-                `;
-
-            } else if (task.type === 'seq') {
-                previewHtml = `<canvas class="asset" id="magic-board" width="${task.w}" height="${task.h}"></canvas>`;
-
-                lessonHtml = `
-                    <div class="magic-step">
-                        <div class="magic-title"><span class="magic-num">1</span> Create a "Drawing Board"</div>
-                        <p>A <code>&lt;canvas&gt;</code> is like a piece of paper the computer can draw on very fast.</p>
-                        <div class="code-box">
-                            <div class="code-header">HTML</div>
-                            <pre>&lt;canvas id="my-board" width="${task.w}" height="${task.h}"&gt;&lt;/canvas&gt;</pre>
-                        </div>
-                    </div>
-                    <div class="magic-step">
-                        <div class="magic-title"><span class="magic-num">2</span> Draw like a Flipbook</div>
-                        <p>We load all our pictures into a list, and then use a timer to draw them one by one!</p>
-                        <div class="code-box">
-                            <div class="code-header">JAVASCRIPT</div>
-                            <pre><span class="comment">// 1. Load all images first</span>
-const frames = [];
-for(let i=0; i< ${totalFrames}; i++) {
-  const img = new Image();
-  img.src = 'frame_' + String(i).padStart(5,'0') + '.png';
-  frames.push(img);
-}
-<span class="comment">// 2. Draw them on the board!</span>
-let frame = 0;
-setInterval(() => {
-  const ctx = document.getElementById('my-board').getContext('2d');
-  ctx.clearRect(0, 0, ${task.w}, ${task.h});
-  ctx.drawImage(frames[frame], 0, 0);
-  frame = (frame + 1) % ${totalFrames};
-}, ${frameDelay});</pre>
-                        </div>
-                    </div>
-                `;
-
-                scriptCode = `
-                    const canvas = document.getElementById('magic-board');
-                    const ctx = canvas.getContext('2d');
-                    const frames = [];
-                    let ld = 0;
-                    for(let i=0; i< ${totalFrames}; i++) {
-                        const img = new Image();
-                        img.src = 'frame_' + String(i).padStart(5, '0') + '.png';
-                        img.onload = () => ld++;
-                        frames.push(img);
-                    }
-                    let f = 0;
-                    setInterval(() => {
-                        if(ld < ${totalFrames}) return;
-                        ctx.clearRect(0, 0, canvas.width, canvas.height);
-                        ctx.drawImage(frames[f], 0, 0);
-                        f = (f + 1) % ${totalFrames};
-                    }, ${frameDelay});
-                `;
-
-            } else if (task.type === 'gif') {
+                assetEl = `<div id="asset" style="width:${task.w}px;height:${task.h}px;background:url('${sheetUrl}') no-repeat;background-size:${task.w * task.cols}px auto;"></div>`;
+                runtime = [
+                    "var TOTAL=" + totalFrames + ", COLS=" + task.cols + ", FW=" + task.w + ", FH=" + task.h + ", DEFAULT_FPS=" + standardFPS + ";",
+                    "var SHEET_URL=" + JSON.stringify(sheetUrl) + ";",
+                    "var asset = document.getElementById('asset');",
+                    "var f = 0, timer = null;",
+                    "function tick(){",
+                    "  var x = (f % COLS) * FW;",
+                    "  var y = Math.floor(f / COLS) * FH;",
+                    "  asset.style.backgroundPosition = '-' + x + 'px -' + y + 'px';",
+                    "  f = (f + 1) % TOTAL;",
+                    "}",
+                    "function applyAnim(fps){ if (timer) clearInterval(timer); timer = setInterval(tick, 1000 / fps); }",
+                    "function buildCode(fps, h, v){",
+                    "  var delay = Math.round(1000 / fps);",
+                    "  var lines = [",
+                    "    '<!-- HTML -->',",
+                    "    '<div id=\"my-window\" style=\"width:' + FW + 'px;height:' + FH + 'px;' +",
+                    "      'background:url(\\'' + SHEET_URL + '\\') no-repeat;' +",
+                    "      'background-size:' + (FW * COLS) + 'px auto;\"></div>',",
+                    "    '',",
+                    "    '<script>',",
+                    "    'var el = document.getElementById(\"my-window\");',",
+                    "    'var COLS = ' + COLS + ', FW = ' + FW + ', FH = ' + FH + ', TOTAL = ' + TOTAL + ';',",
+                    "    'var frame = 0;'",
+                    "  ];",
+                    "  if (h || v) lines.push('el.style.transform = \"scale(' + (h?-1:1) + ',' + (v?-1:1) + ')\";');",
+                    "  lines = lines.concat([",
+                    "    'setInterval(function(){',",
+                    "    '  var x = (frame % COLS) * FW;',",
+                    "    '  var y = Math.floor(frame / COLS) * FH;',",
+                    "    '  el.style.backgroundPosition = -x + \"px \" + -y + \"px\";',",
+                    "    '  frame = (frame + 1) % TOTAL;',",
+                    "    '}, ' + delay + ');',",
+                    "    '<\\/script>'",
+                    "  ]);",
+                    "  return lines.join('\\n');",
+                    "}"
+                ].join("\n");
+            } else if (isSeq) {
+                assetEl = `<canvas id="asset-canvas" width="${task.w}" height="${task.h}"></canvas>`;
+                runtime = [
+                    "var TOTAL=" + totalFrames + ", FW=" + task.w + ", FH=" + task.h + ", DEFAULT_FPS=" + standardFPS + ";",
+                    "var asset = document.getElementById('asset-canvas');",
+                    "var ctx = asset.getContext('2d');",
+                    "var frames = [], loaded = 0;",
+                    "for (var i = 0; i < TOTAL; i++){",
+                    "  (function(idx){",
+                    "    var im = new Image();",
+                    "    im.onload = function(){ loaded++; };",
+                    "    im.src = 'frame_' + ('00000' + idx).slice(-5) + '.png';",
+                    "    frames.push(im);",
+                    "  })(i);",
+                    "}",
+                    "var f = 0, timer = null;",
+                    "function tick(){",
+                    "  if (loaded < TOTAL) return;",
+                    "  ctx.clearRect(0, 0, FW, FH);",
+                    "  ctx.drawImage(frames[f], 0, 0);",
+                    "  f = (f + 1) % TOTAL;",
+                    "}",
+                    "function applyAnim(fps){ if (timer) clearInterval(timer); timer = setInterval(tick, 1000 / fps); }",
+                    "function buildCode(fps, h, v){",
+                    "  var delay = Math.round(1000 / fps);",
+                    "  var lines = [",
+                    "    '<!-- HTML -->',",
+                    "    '<canvas id=\"my-canvas\" width=\"' + FW + '\" height=\"' + FH + '\"></canvas>',",
+                    "    '',",
+                    "    '<script>',",
+                    "    'var canvas = document.getElementById(\"my-canvas\");',",
+                    "    'var ctx = canvas.getContext(\"2d\");',",
+                    "    'var TOTAL = ' + TOTAL + ', frames = [], loaded = 0;',",
+                    "    'for (var i = 0; i < TOTAL; i++) {',",
+                    "    '  (function(idx){',",
+                    "    '    var im = new Image();',",
+                    "    '    im.onload = function(){ loaded++; };',",
+                    "    '    im.src = \"frame_\" + (\"00000\" + idx).slice(-5) + \".png\";',",
+                    "    '    frames.push(im);',",
+                    "    '  })(i);',",
+                    "    '}',",
+                    "    'var frame = 0;'",
+                    "  ];",
+                    "  if (h || v) lines.push('canvas.style.transform = \"scale(' + (h?-1:1) + ',' + (v?-1:1) + ')\";');",
+                    "  lines = lines.concat([",
+                    "    'setInterval(function(){',",
+                    "    '  if (loaded < TOTAL) return;',",
+                    "    '  ctx.clearRect(0, 0, ' + FW + ', ' + FH + ');',",
+                    "    '  ctx.drawImage(frames[frame], 0, 0);',",
+                    "    '  frame = (frame + 1) % TOTAL;',",
+                    "    '}, ' + delay + ');',",
+                    "    '<\\/script>'",
+                    "  ]);",
+                    "  return lines.join('\\n');",
+                    "}"
+                ].join("\n");
+            } else { // gif
                 const gifUrl = `${baseName}_${task.label}.gif`;
-                previewHtml = `<img class="asset" src="${gifUrl}" alt="GIF movie">`;
-
-                lessonHtml = `
-                    <div class="magic-step">
-                        <div class="magic-title"><span class="magic-num">1</span> The One-Step Magic</div>
-                        <p>GIF files are like magical self-playing movies. You only need ONE tag to show them!</p>
-                        <div class="code-box">
-                            <div class="code-header">HTML</div>
-                            <pre>&lt;img src="${gifUrl}" /&gt;</pre>
-                        </div>
-                    </div>
-                `;
+                assetEl = `<img id="asset-img" src="${gifUrl}" alt="GIF" style="width:${task.w}px;height:${task.h}px;">`;
+                runtime = [
+                    "var GIF_URL=" + JSON.stringify(gifUrl) + ", FW=" + task.w + ", FH=" + task.h + ";",
+                    "var asset = document.getElementById('asset-img');",
+                    "function applyAnim(fps){ /* GIF playback rate is baked into the file. */ }",
+                    "function buildCode(fps, h, v){",
+                    "  var lines = [",
+                    "    '<!-- GIFs play at the speed encoded into the file at export time. -->',",
+                    "    '<img id=\"my-gif\" src=\"' + GIF_URL + '\" />'",
+                    "  ];",
+                    "  if (h || v) lines.push('<style>#my-gif{transform:scale(' + (h?-1:1) + ',' + (v?-1:1) + ');}<\\/style>');",
+                    "  return lines.join('\\n');",
+                    "}"
+                ].join("\n");
             }
+
+            const flipApply = "function applyFlip(){\n" +
+                "  var h = document.getElementById('flipH').checked;\n" +
+                "  var v = document.getElementById('flipV').checked;\n" +
+                "  asset.style.transform = 'scale(' + (h?-1:1) + ',' + (v?-1:1) + ')';\n" +
+                "}\n";
+
+            const wireUp = [
+                "var speed = document.getElementById('speed');",
+                "var speedVal = document.getElementById('speedVal');",
+                "var flipH = document.getElementById('flipH');",
+                "var flipV = document.getElementById('flipV');",
+                "var liveCode = document.getElementById('liveCode');",
+                "function syncAll(){",
+                "  var fps = parseFloat(speed.value);",
+                "  speedVal.textContent = fps.toFixed(1) + ' fps';",
+                "  applyAnim(fps);",
+                "  applyFlip();",
+                "  liveCode.textContent = buildCode(fps, flipH.checked, flipV.checked);",
+                "}",
+                "speed.addEventListener('input', syncAll);",
+                "flipH.addEventListener('change', syncAll);",
+                "flipV.addEventListener('change', syncAll);",
+                "syncAll();"
+            ].join("\n");
+
+            const fullScript = runtime + "\n" + flipApply + "\n" + wireUp;
 
             return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Magic Animation! - ${task.label}</title>
+    <title>Preview - ${task.label}</title>
     <style>${style}</style>
 </head>
 <body>
     <div class="container">
         <div class="card">
-            <div class="pill">${task.type === 'sheet' ? 'Sprite Sheet' : (task.type === 'seq' ? 'PNG Sequence' : 'GIF')}</div>
-            <h1>Your Artwork is Alive!</h1>
-            <div class="asset-frame">
-                ${previewHtml}
+            <div class="pill">${isSheet ? 'Sprite Sheet' : (isSeq ? 'PNG Sequence' : 'GIF')}</div>
+            <h1>${task.label} preview</h1>
+
+            <div class="asset-frame" style="width:${dispW}px;height:${dispH}px;overflow:hidden;">
+                <div class="scaler" style="width:${task.w}px;height:${task.h}px;transform:scale(${dispScale});">
+                    ${assetEl}
+                </div>
             </div>
-            <p style="color:var(--accent); font-weight:700; margin-top:10px;">Speed: ${standardFPS.toFixed(1)} FPS</p>
+
+            <div class="controls">
+                <label>
+                    Speed
+                    <input type="range" id="speed" min="${minFps}" max="${maxFps}" step="${fpsStep}" value="${standardFPS}" ${isGif ? 'disabled' : ''}>
+                    <span id="speedVal">${standardFPS.toFixed(1)} fps</span>
+                </label>
+                <label><input type="checkbox" id="flipH"> Flip H</label>
+                <label><input type="checkbox" id="flipV"> Flip V</label>
+            </div>
+            ${isGif ? `<p class="gif-note">Note: speed slider is disabled — GIF playback rate is baked into the file at export time.</p>` : ''}
         </div>
 
         <div class="lesson">
-            <h2>The Magic Behind the Scenes</h2>
-            <p>Ever wonder how these pictures move? It's just simple code! Here is exactly how we did it:</p>
-            ${lessonHtml}
+            <h2>Code (updates with controls above)</h2>
+            <p>Copy this into your project. The values below reflect the slider/flip settings on this page.</p>
+            <div class="code-box">
+                <div class="code-header">HTML + JavaScript</div>
+                <pre id="liveCode"></pre>
+            </div>
         </div>
     </div>
-    <script>${scriptCode}<\/script>
+    <script>${fullScript}<\/script>
 </body>
 </html>`;
         };

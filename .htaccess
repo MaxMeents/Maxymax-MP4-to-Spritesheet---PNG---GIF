@@ -1,0 +1,16 @@
+# Allow large spritesheet uploads to corridorkey_proxy.php.
+# PHP defaults (8M post / 2M upload) reject full-res sheets.
+<IfModule mod_php7.c>
+    php_value post_max_size       1024M
+    php_value upload_max_filesize 1024M
+    php_value memory_limit        2048M
+    php_value max_execution_time  0
+    php_value max_input_time      0
+</IfModule>
+<IfModule mod_php.c>
+    php_value post_max_size       1024M
+    php_value upload_max_filesize 1024M
+    php_value memory_limit        2048M
+    php_value max_execution_time  0
+    php_value max_input_time      0
+</IfModule>
